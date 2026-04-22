@@ -1,73 +1,73 @@
 # 🎯 CoolPlanning
 
-Une app de planning personnel tout-en-un, construite en React + Vite.
+An all-in-one personal planning app, built with React + Vite.
 
 ---
 
-## ✨ Fonctionnalités
+## ✨ Features
 
-### 📅 Journée
-- Tâches avec catégories, priorités et coefficients de score
-- Système de score journalier configurable (×1, ×2, ×3)
-- Tâches bonus ⭐ (ne comptent pas dans le score principal)
-- Planification horaire avec vue timeline
-- Liaison aux objectifs de la semaine, projets et cours
-- Sous-tâches, notes et récurrence
-- Journal du jour + humeur
-- Auto-report des tâches non faites au lendemain
+### 📅 Daily view
+- Tasks with categories, priorities and score coefficients
+- Configurable daily score system (×1, ×2, ×3)
+- Bonus tasks ⭐ (don't count toward the main score)
+- Hourly scheduling with timeline view
+- Link tasks to weekly goals, projects and courses
+- Subtasks, notes and recurring tasks
+- Daily journal + mood tracker
+- Auto-carry of unfinished tasks to the next day
 
-### 🗓 Habitudes
-- Habitudes **quotidiennes** et **hebdomadaires** personnalisables
-- Streaks 🔥 et heatmap 12 semaines
-- Drag & drop pour réordonner
+### 🗓 Habits
+- Customisable **daily** and **weekly** habits
+- Streaks 🔥 and 12-week heatmap
+- Drag & drop to reorder
 
-### 📅 Mois
-- 3 priorités mensuelles max
-- Suivi de la progression hebdomadaire
+### 📅 Month
+- Up to 3 monthly priorities
+- Weekly progress tracking
 
 ### 📌 To-Do (Backlog)
-- Liste d'idées à planifier plus tard
-- Planification rapide vers n'importe quel jour
-- Groupement par catégorie
+- Ideas to schedule for later
+- Quick scheduling to any day
+- Grouped by category
 
-### 📊 Historique & 📈 Analyse
-- Calendrier mensuel avec indicateurs visuels
-- Graphiques de complétion, score 90 jours, heatmap habitudes
-- Streaks, meilleur jour de la semaine, répartition par catégorie
+### 📊 History & 📈 Analytics
+- Monthly calendar with visual indicators
+- Completion charts, 90-day score, habit heatmap
+- Streaks, best day of the week, breakdown by category
 
-### 🎓 Cours
-- Suivi de présence par semaine et créneau
-- Échéances (examens, rendus, projets, oraux) avec checklist
+### 🎓 Courses
+- Attendance tracking by week and time slot
+- Deadlines (exams, assignments, projects, orals) with checklists
 
-### 📁 Projets & 🍽️ Recettes
-- Projets avec deadline, liaison aux tâches, archivage
-- Bibliothèque de recettes avec planification des repas
+### 📁 Projects & 🍽️ Recipes
+- Projects with deadlines, task linking and archiving
+- Recipe library with meal planning
 
 ### ⏱ Pomodoro
-- Timer 25/5 min avec log automatique du temps de focus
+- 25/5 min timer with automatic focus time logging
 
 ---
 
-## ⌨️ Raccourcis clavier
+## ⌨️ Keyboard shortcuts
 
-| Touche | Action |
-|--------|--------|
-| `/` ou `Ctrl+K` | Recherche globale |
-| `N` | Ajout rapide |
-| `Ctrl+Z` | Annuler la dernière suppression |
-| `1` – `9` | Naviguer entre les onglets |
-| `Échap` | Fermer les modales |
+| Key | Action |
+|-----|--------|
+| `/` or `Ctrl+K` | Global search |
+| `N` | Quick add |
+| `Ctrl+Z` | Undo last deletion |
+| `1` – `9` | Navigate between tabs |
+| `Esc` | Close modals |
 
 ---
 
-## 🚀 Installation
+## 🚀 Getting started
 
 ```bash
 npm install
 npm run dev
 ```
 
-L'app tourne sur `http://localhost:5173` par défaut.
+The app runs on `http://localhost:5173` by default.
 
 ---
 
@@ -84,7 +84,7 @@ coolplanning/
 │   │   ├── react.svg
 │   │   └── vite.svg
 │   ├── App.css
-│   ├── App.jsx        # Composants, logique, styles (tout-en-un)
+│   ├── App.jsx        # Components, logic and styles (all-in-one)
 │   ├── index.css
 │   └── main.jsx
 ├── .gitignore
@@ -96,18 +96,18 @@ coolplanning/
 
 ---
 
-## 💾 Données
+## 💾 Data
 
-- Sauvegarde automatique dans `localStorage`
-- Sync optionnelle via `POST /api/save` et `GET /api/load`
-- Export **JSON**, **CSV** et **PDF**
-- Import JSON
+- Auto-save to `localStorage`
+- Optional sync via `POST /api/save` and `GET /api/load`
+- Export as **JSON**, **CSV** or **PDF**
+- JSON import
 
 ---
 
 ## 🛠 Stack
 
 - **React 18** + **Vite**
-- CSS-in-JS vanilla (zéro dépendance UI)
-- Web Audio API pour les sons
-- Notifications navigateur natives
+- Vanilla CSS-in-JS (zero UI dependencies)
+- Web Audio API for sounds
+- Native browser notifications

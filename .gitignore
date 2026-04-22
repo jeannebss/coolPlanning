@@ -23,5 +23,5 @@ dist-ssr
 *.sln
 *.sw?
 
-# Local data (données personnelles)
+# Local data
 coolplanning-data.json
