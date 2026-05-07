@@ -691,7 +691,12 @@ function getWeekLabel(key) {
 function load() { try { return JSON.parse(localStorage.getItem("goalsAppV2") || "{}"); } catch { return {}; } }
 function save(d) {
     try { localStorage.setItem("goalsAppV2", JSON.stringify(d)); } catch {}
-    fetch("/api/save", { method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify(d) }).catch(()=>{});
+    if (navigator.sendBeacon) {
+        const blob = new Blob([JSON.stringify(d)], { type: "application/json" });
+        navigator.sendBeacon("/api/save", blob);
+    } else {
+        fetch("/api/save", { method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify(d) }).catch(()=>{});
+    }
 }
 async function loadFromFile() {
     try {
@@ -1119,7 +1124,34 @@ export default function App() {
     const sideWeekStart = (() => { const d = localDate(weekKey); d.setDate(d.getDate() + sideWeekOff*7); return dateToKey(d); })();
     const sideWeekDays  = getWeekDays(sideWeekStart);
 
-    const persist = nd => { setData(nd); save(nd); };
+const [saveStatus, setSaveStatus] = useState("saved");
+const saveTimerRef = useRef(null);
+
+const persist = nd => {
+    setData(nd);
+    setSaveStatus("pending");
+    if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+    saveTimerRef.current = setTimeout(async () => {
+        setSaveStatus("saving");
+        try {
+            const body = JSON.stringify(nd);
+            try { localStorage.setItem("goalsAppV2", body); } catch {}
+            const ok = navigator.sendBeacon
+                ? navigator.sendBeacon("/api/save", new Blob([body], { type:"application/json" }))
+                : await fetch("/api/save", { method:"POST", headers:{"Content-Type":"application/json"}, body }).then(r=>r.ok);
+            setSaveStatus(ok !== false ? "saved" : "error");
+        } catch { setSaveStatus("error"); }
+    }, 800);
+};
+
+useEffect(() => {
+    const handle = () => {
+        const body = JSON.stringify(dataRef.current);
+        navigator.sendBeacon?.("/api/save", new Blob([body], { type:"application/json" }));
+    };
+    window.addEventListener("beforeunload", handle);
+    return () => window.removeEventListener("beforeunload", handle);
+}, []);
 
     // ── Data accessors ──
     const getGoalsForWeek = wk      => data.weeks?.[wk]?.goals || [];
@@ -1127,7 +1159,11 @@ export default function App() {
     const getDayGoals     = dk      => data.days?.[dk]?.goals || [];
     const setDayGoals     = (dk,gs) => persist({ ...data, days:{ ...data.days, [dk]:{ ...data.days?.[dk], goals:gs } } });
     const getDayJournal      = dk      => data.journal?.[dk] || "";
-    const setDayJournal      = (dk,tx) => persist({ ...data, journal:{ ...data.journal, [dk]:tx } });
+    const setDayJournal = (dk,tx) => {
+    const nd = { ...dataRef.current, journal:{ ...dataRef.current.journal, [dk]:tx } };
+        setData(nd);
+        save(nd);
+    };
     const getDayMood         = dk      => data.moods?.[dk] || 0;
     const setDayMood         = (dk,v)  => persist({ ...data, moods:{ ...data.moods, [dk]:v } });
     const logPomodoro = (mins, linkedTaskId) => {
@@ -1704,6 +1740,25 @@ export default function App() {
                             <div style={{ fontSize:17, fontWeight:800, letterSpacing:"-0.3px", whiteSpace:"nowrap" }}>{headerTitle()}</div>
                         </div>
                         <div style={{ display:"flex", gap:6, alignItems:"center", flexShrink:0 }}>
+                        {/*
+                        <div style={{ display:"flex", alignItems:"center", gap:6, fontSize:11, color: saveStatus==="error" ? "#f87171" : saveStatus==="saving" || saveStatus==="pending" ? "#f97316" : "#34d399", flexShrink:0 }}>
+                            {saveStatus==="pending"  && <><span style={{width:6,height:6,borderRadius:"50%",background:"#f97316",display:"inline-block"}}/> En attente</>}
+                            {saveStatus==="saving"   && <><span style={{width:6,height:6,borderRadius:"50%",background:"#fbbf24",display:"inline-block"}}/> Sauvegarde…</>}
+                            {saveStatus==="saved"    && <><span style={{width:6,height:6,borderRadius:"50%",background:"#34d399",display:"inline-block"}}/> Sauvegardé</>}
+                            {saveStatus==="error"    && <><span style={{width:6,height:6,borderRadius:"50%",background:"#f87171",display:"inline-block"}}/> ⚠ Erreur</>}
+                            <button
+                                onClick={async () => {
+                                    setSaveStatus("saving");
+                                    try {
+                                        const body = JSON.stringify(dataRef.current);
+                                        await fetch("/api/save", { method:"POST", headers:{"Content-Type":"application/json"}, body });
+                                        setSaveStatus("saved");
+                                    } catch { setSaveStatus("error"); }
+                                }}
+                                style={{ padding:"4px 10px", borderRadius:8, border:`1px solid ${saveStatus==="error"?"rgba(248,113,113,0.5)":"rgba(52,211,153,0.4)"}`, background:saveStatus==="error"?"rgba(248,113,113,0.1)":"rgba(52,211,153,0.1)", color:saveStatus==="error"?"#f87171":"#34d399", fontSize:11, cursor:"pointer", fontWeight:600, whiteSpace:"nowrap" }}>
+                                💾 Forcer
+                            </button>
+                        </div> */}
                             <button className="bt" onClick={()=>{ setShowSearch(true); setTimeout(()=>searchInputRef.current?.focus(),50); }} style={btnStyle(showSearch)} title="Rechercher (/)">🔍</button>
                             <button className="bt" onClick={()=>setSoundOn(v=>!v)} style={btnStyle(!soundOn)} title={soundOn?"Son activé":"Son désactivé"}>{soundOn?"🔊":"🔇"}</button>
                             <button className="bt" onClick={exportData} style={btnStyle(false)} title="Exporter JSON">⬇️</button>
@@ -1906,6 +1961,17 @@ function DayView({ goals, dayKey, onAdd, onToggle, onRemove, onUpdate, onReorder
     const [editScoreMinL1,  setEditScoreMinL1]  = useState("");
     const [journalDraft, setJournalDraft] = useState(journal);
     useEffect(()=>{ setJournalDraft(journal); }, [journal]);
+
+    // Autosave journal toutes les 2s si le draft a changé
+    const journalSaveRef = useRef(null);
+    useEffect(() => {
+        if (journalDraft === journal) return;
+        if (journalSaveRef.current) clearTimeout(journalSaveRef.current);
+        journalSaveRef.current = setTimeout(() => {
+            onJournalChange(journalDraft);
+        }, 500);
+        return () => clearTimeout(journalSaveRef.current);
+    }, [journalDraft]);
 
     const dayOfWeek = (() => { const d = new Date(dayKey + "T12:00:00"); return (d.getDay()+6)%7; })(); // Mon=0
     const isSunday = dayOfWeek === 6;
@@ -2226,7 +2292,6 @@ function DayView({ goals, dayKey, onAdd, onToggle, onRemove, onUpdate, onReorder
           <textarea
               value={journalDraft}
               onChange={e=>setJournalDraft(e.target.value)}
-              onBlur={()=>onJournalChange(journalDraft)}
               placeholder={tr("journal_ph")}
 
               style={{ ...s.input, width:"100%", minHeight:120, resize:"vertical", lineHeight:1.6, fontSize:13 }}
