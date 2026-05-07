@@ -1080,12 +1080,15 @@ function GoalItem({ goal, idx, onToggle, onRemove, onUpdate, onReorder, showPend
 // ── App ───────────────────────────────────────────────────────────────────────
 
 export default function App() {
-    const [data,        setData]        = useState(load);
+    const [data, setData] = useState(load);
+    const [fileLoaded, setFileLoaded] = useState(false);
     useEffect(() => {
         loadFromFile().then(fileData => {
-            if (!fileData) return;
-            setData(fileData);
-            try { localStorage.setItem("goalsAppV2", JSON.stringify(fileData)); } catch {}
+            if (fileData) {
+                setData(fileData);
+                try { localStorage.setItem("goalsAppV2", JSON.stringify(fileData)); } catch {}
+            }
+            setFileLoaded(true);
         });
     }, []);
     const [tab,         setTab]         = useState("day");
@@ -1296,6 +1299,7 @@ useEffect(() => {
 
     // ── Auto-carry all non-done tasks from previous day ──
     useEffect(() => {
+        if (!fileLoaded) return;
         const today = getTodayKey();
         const d = dataRef.current;
 
@@ -1353,7 +1357,7 @@ useEffect(() => {
 
         save(nd);
         setData(nd);
-    }, []); // S'exécute une fois au chargement
+    }, [fileLoaded]); // S'exécute une fois au chargement
 
 
     // ── Undo ──
@@ -1967,8 +1971,8 @@ function DayView({ goals, dayKey, onAdd, onToggle, onRemove, onUpdate, onReorder
     useEffect(() => {
         if (journalDraft === journal) return;
         if (journalSaveRef.current) clearTimeout(journalSaveRef.current);
-        journalSaveRef.current = setTimeout(() => {
-            onJournalChange(journalDraft);
+       journalSaveRef.current = setTimeout(() => {
+            if (journalDraft !== journal) onJournalChange(journalDraft);
         }, 500);
         return () => clearTimeout(journalSaveRef.current);
     }, [journalDraft]);
@@ -3410,8 +3414,13 @@ function AnalyticsView({ data, weekKey, monthKey, dailyHabitsCount, journal, wee
             {(() => {
                 const allDayGoalsWithDk = Object.entries(data.days||{}).flatMap(([dk, d]) => (d.goals||[]).map(g => ({ ...g, _dk: dk })));
                 const withAge = allDayGoalsWithDk
-                    .filter(g => !g.done && g.createdAt)
-                    .map(g => ({ ...g, pendingDays: Math.round((new Date(getTodayKey()+"T12:00:00") - new Date(g.createdAt+"T12:00:00")) / 86400000) }))
+                    .filter(g => !g.done && g.createdAt && !g.carriedOver)
+                    .map(g => ({
+                        ...g,
+                        pendingDays: Math.round(
+                            (new Date(getTodayKey()+"T12:00:00") - new Date(g.createdAt+"T12:00:00")) / 86400000
+                        )
+                    }))
                     .filter(g => g.pendingDays >= 2);
                 const seen = new Map();
                 for (const g of withAge) {
