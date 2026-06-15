@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+﻿import { useState, useEffect, useRef } from "react";
 
 // ── i18n ─────────────────────────────────────────────────────────────────────
 
@@ -19,7 +19,7 @@ const I18N = {
         // Tabs
         tab_day:"Day", tab_month:"Month", tab_habits:"Habits", tab_todo:"To-Do",
         tab_history:"History", tab_analytics:"Analytics", tab_recipes:"Recipes",
-        tab_courses:"Courses", tab_projects:"Projects",
+        tab_courses:"Courses", tab_projects:"Projects", tab_budget:"Budget",
         // Sidebar
         views:"Views", week_lbl:"Week", this_week:"This week", today_badge:"today",
         app_title:"🎯 My Goals",
@@ -269,7 +269,7 @@ const I18N = {
         months:["Janvier","Février","Mars","Avril","Mai","Juin","Juillet","Août","Septembre","Octobre","Novembre","Décembre"],
         tab_day:"Journée", tab_month:"Mois", tab_habits:"Habitudes", tab_todo:"To-Do",
         tab_history:"Historique", tab_analytics:"Analyse", tab_recipes:"Recettes",
-        tab_courses:"Cours", tab_projects:"Projets",
+        tab_courses:"Cours", tab_projects:"Projets", tab_budget:"Budget",
         views:"Vues", week_lbl:"Semaine", this_week:"Cette semaine", today_badge:"auj.",
         app_title:"🎯 Mes Objectifs",
         hdr_month:"Mois", hdr_habits:"Habitudes", hdr_history:"Historique",
@@ -1084,9 +1084,17 @@ export default function App() {
     const [fileLoaded, setFileLoaded] = useState(false);
     useEffect(() => {
         loadFromFile().then(fileData => {
-            if (fileData) {
-                setData(fileData);
-                try { localStorage.setItem("goalsAppV2", JSON.stringify(fileData)); } catch {}
+            const localRaw = localStorage.getItem("goalsAppV2");
+            const localData = localRaw ? JSON.parse(localRaw) : null;
+
+            const fileTs  = fileData?._savedAt  || 0;
+            const localTs = localData?._savedAt || 0;
+
+            const best = fileTs >= localTs ? fileData : localData;
+
+            if (best) {
+                setData(best);
+                localStorage.setItem("goalsAppV2", JSON.stringify(best));
             }
             setFileLoaded(true);
         });
@@ -1106,6 +1114,7 @@ export default function App() {
     const [soundOn,     setSoundOn]     = useState(true);
     const [sideWeekOff, setSideWeekOff] = useState(0);
     const [pomoOpen,    setPomoOpen]    = useState(false);
+    const [budgetVisible, setBudgetVisible] = useState(false);
     const undoTimerRef     = useRef(null);
     const dataRef          = useRef(data);
     useEffect(() => { dataRef.current = data; });
@@ -1131,7 +1140,8 @@ const [saveStatus, setSaveStatus] = useState("saved");
 const saveTimerRef = useRef(null);
 
 const persist = nd => {
-    setData(nd);
+    const ndWithTs = { ...nd, _savedAt: Date.now() };
+    setData(ndWithTs);
     setSaveStatus("pending");
     if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
     saveTimerRef.current = setTimeout(async () => {
@@ -1171,6 +1181,7 @@ useEffect(() => {
     const setDayMood         = (dk,v)  => persist({ ...data, moods:{ ...data.moods, [dk]:v } });
     const logPomodoro = (mins, linkedTaskId) => {
         const dk = getTodayKey();
+        const d = dataRef.current;
         const existing = data.pomodoro?.[dk];
         const sessions = Array.isArray(existing) ? existing
             : typeof existing === "number" && existing > 0 ? [{ id:uid(), mins:existing, at:"" }]
@@ -1189,7 +1200,7 @@ useEffect(() => {
                 }
             }
         }
-        persist({ ...data, pomodoro: { ...data.pomodoro, [dk]: [...sessions, sess] }, days: newDays });
+        persist({ ...d, pomodoro: { ...d.pomodoro, [dk]: [...sessions, sess] }, days: newDays });
     };
     const deletePomodoro = (dk, sid) => {
         const existing = data.pomodoro?.[dk];
@@ -1207,6 +1218,21 @@ useEffect(() => {
     const getMeals      = dk        => data.meals?.[dk] || [];
     const addMeal       = (dk,entry)=> persist({ ...data, meals:{ ...data.meals, [dk]:[...getMeals(dk),entry] } });
     const removeMeal    = (dk,id)   => persist({ ...data, meals:{ ...data.meals, [dk]:getMeals(dk).filter(m=>m.id!==id) } });
+    // ── Budget ──
+    const getBudgetData       = ()          => data.budget || {};
+    const getBudgetExpenses   = ()          => getBudgetData().expenses || [];
+    const getBudgetContribs   = ()          => getBudgetData().contributions || [];
+    const getBudgetSettings   = ()          => ({ rate:1.065, displayCurrency:"CHF", ...getBudgetData().settings });
+    const updateBudget        = patch       => persist({ ...data, budget:{ ...getBudgetData(), ...patch } });
+    const addBudgetExpense    = exp         => updateBudget({ expenses:[...getBudgetExpenses(), exp] });
+    const updateBudgetExpense = (id,patch)  => updateBudget({ expenses:getBudgetExpenses().map(e=>e.id===id?{...e,...patch}:e) });
+    const deleteBudgetExpense = id          => updateBudget({ expenses:getBudgetExpenses().filter(e=>e.id!==id) });
+    const addBudgetContrib       = c    => updateBudget({ contributions:[...getBudgetContribs(), c] });
+    const deleteBudgetContrib    = id   => updateBudget({ contributions:getBudgetContribs().filter(c=>c.id!==id) });
+    const updateBudgetSettings   = patch=> updateBudget({ settings:{ ...getBudgetSettings(), ...patch } });
+    const getBudgetReimbs        = ()   => getBudgetData().reimbursements || [];
+    const addBudgetReimb         = r    => updateBudget({ reimbursements:[...getBudgetReimbs(), r] });
+    const deleteBudgetReimb      = id   => updateBudget({ reimbursements:getBudgetReimbs().filter(r=>r.id!==id) });
 
     // ── Courses ──
     const getCourses        = ()          => data.courses || [];
@@ -1617,7 +1643,7 @@ useEffect(() => {
     const monthLabel = MONTHS_FR[now.getMonth()]+" "+now.getFullYear();
     const isCurrentWeek = viewWeekKey === weekKey;
 
-    const tabs = [["day","📅",tr("tab_day")],["month","📆",tr("tab_month")],["habits","🔄",tr("tab_habits")],["todo","📌","To-Do"],["history","📊",tr("tab_history")],["analytics","📈",tr("tab_analytics")],["recipes","🍽️",tr("tab_recipes")],["cours","🎓",tr("tab_courses")],["projets","📁",tr("tab_projects")]];
+    const tabs = [["day","📅",tr("tab_day")],["month","📆",tr("tab_month")],["habits","🔄",tr("tab_habits")],["todo","📌","To-Do"],["history","📊",tr("tab_history")],["analytics","📈",tr("tab_analytics")],["recipes","🍽️",tr("tab_recipes")],["cours","🎓",tr("tab_courses")],["projets","📁",tr("tab_projects")],["budget","💰",tr("tab_budget")]];
 
     // ── Week navigation ──
     const prevWeek = () => { const d=new Date(viewWeekKey); d.setDate(d.getDate()-7); setViewWeekKey(d.toISOString().slice(0,10)); };
@@ -1655,8 +1681,8 @@ useEffect(() => {
     };
 
     const H = t.isDark
-        ? { day:"#60a5fa", week:"#c4b5fd", month:"#f472b6", habits:"#34d399", todo:"#a78bfa", history:"#f97316", analytics:"#38bdf8", hist2:"#f97316", cours:"#4ade80", projets:"#60a5fa" }
-        : { day:"#1d4ed8", week:"#5b21b6", month:"#9d174d", habits:"#047857", todo:"#6d28d9", history:"#c2410c", analytics:"#0369a1", recipes:"#b45309", hist2:"#c2410c", cours:"#047857", projets:"#1d4ed8" };
+        ? { day:"#60a5fa", week:"#c4b5fd", month:"#f472b6", habits:"#34d399", todo:"#a78bfa", history:"#f97316", analytics:"#38bdf8", hist2:"#f97316", cours:"#4ade80", projets:"#60a5fa", budget:"#34d399" }
+        : { day:"#1d4ed8", week:"#5b21b6", month:"#9d174d", habits:"#047857", todo:"#6d28d9", history:"#c2410c", analytics:"#0369a1", recipes:"#b45309", hist2:"#c2410c", cours:"#047857", projets:"#1d4ed8", budget:"#059669" };
     const headerTitle = () => {
         if (tab==="day")       return <span style={{ color:H.day }}>{DAYS_FR[weekDays.indexOf(selectedDay)]} {new Date(selectedDay).toLocaleDateString(_LANG==="fr"?"fr-FR":"en-US",{day:"2-digit",month:"long"})}</span>;
         if (tab==="month")     return <span style={{ color:H.month }}>{tr("hdr_month")} — {monthLabel}</span>;
@@ -1667,6 +1693,7 @@ useEffect(() => {
         if (tab==="recipes")   return <span style={{ color:H.recipes }}>{tr("hdr_recipes")} — {getRecipes().length} {getRecipes().length!==1?tr("recipe_pl"):tr("recipe_sg")}</span>;
         if (tab==="cours")     return <span style={{ color:H.cours }}>{tr("hdr_courses")} — {getCourses().length} {getCourses().length!==1?tr("subject_pl"):tr("subject_sg")}</span>;
         if (tab==="projets")   return <span style={{ color:H.projets }}>{tr("hdr_projects")} — {getProjects().filter(p=>!p.archived).length} {tr("active_sg")}</span>;
+        if (tab==="budget")    return <span style={{ color:H.budget }}>💰 Budget Études</span>;
     };
 
     const btnStyle = (active) => ({ ...s.iconBtn, borderColor: active ? "rgba(139,92,246,0.4)" : t.inpBdr, background: active ? "rgba(139,92,246,0.12)" : "transparent", color: active ? "#c4b5fd" : t.textSub });
@@ -1691,7 +1718,7 @@ useEffect(() => {
                             {tabs.map(([id,ico,lbl]) => (
                                 <button key={id} className="sb" style={s.sideBtn(tab===id)} onClick={()=>setTab(id)}>
                                     <span style={{ fontSize:14 }}>{ico}</span>{lbl}
-                                    <span style={{ fontSize:9, marginLeft:"auto", color:t.textTiny, fontFamily:"monospace" }}>{ {"day":"1","month":"2","habits":"3","todo":"4","history":"5","analytics":"6","recipes":"7","cours":"8","projets":"9"}[id]||"" }</span>
+                                    <span style={{ fontSize:9, marginLeft:"auto", color:t.textTiny, fontFamily:"monospace" }}>{ {"day":"1","month":"2","habits":"3","todo":"4","history":"5","analytics":"6","recipes":"7","cours":"8","projets":"9","budget":"0"}[id]||"" }</span>
                                 </button>
                             ))}
                         </div>
@@ -1744,7 +1771,6 @@ useEffect(() => {
                             <div style={{ fontSize:17, fontWeight:800, letterSpacing:"-0.3px", whiteSpace:"nowrap" }}>{headerTitle()}</div>
                         </div>
                         <div style={{ display:"flex", gap:6, alignItems:"center", flexShrink:0 }}>
-                        {/*
                         <div style={{ display:"flex", alignItems:"center", gap:6, fontSize:11, color: saveStatus==="error" ? "#f87171" : saveStatus==="saving" || saveStatus==="pending" ? "#f97316" : "#34d399", flexShrink:0 }}>
                             {saveStatus==="pending"  && <><span style={{width:6,height:6,borderRadius:"50%",background:"#f97316",display:"inline-block"}}/> En attente</>}
                             {saveStatus==="saving"   && <><span style={{width:6,height:6,borderRadius:"50%",background:"#fbbf24",display:"inline-block"}}/> Sauvegarde…</>}
@@ -1762,7 +1788,7 @@ useEffect(() => {
                                 style={{ padding:"4px 10px", borderRadius:8, border:`1px solid ${saveStatus==="error"?"rgba(248,113,113,0.5)":"rgba(52,211,153,0.4)"}`, background:saveStatus==="error"?"rgba(248,113,113,0.1)":"rgba(52,211,153,0.1)", color:saveStatus==="error"?"#f87171":"#34d399", fontSize:11, cursor:"pointer", fontWeight:600, whiteSpace:"nowrap" }}>
                                 💾 Forcer
                             </button>
-                        </div> */}
+                        </div>
                             <button className="bt" onClick={()=>{ setShowSearch(true); setTimeout(()=>searchInputRef.current?.focus(),50); }} style={btnStyle(showSearch)} title="Rechercher (/)">🔍</button>
                             <button className="bt" onClick={()=>setSoundOn(v=>!v)} style={btnStyle(!soundOn)} title={soundOn?"Son activé":"Son désactivé"}>{soundOn?"🔊":"🔇"}</button>
                             <button className="bt" onClick={exportData} style={btnStyle(false)} title="Exporter JSON">⬇️</button>
@@ -1795,6 +1821,7 @@ useEffect(() => {
                         {tab==="recipes"   && <RecipesView recipes={getRecipes()} meals={data.meals||{}} onAdd={addRecipe} onUpdate={updateRecipe} onDelete={deleteRecipe} onAddMeal={addMeal} onRemoveMeal={removeMeal} s={s} t={t} />}
                         {tab==="cours"     && <CoursesView courses={getCourses()} courseProgress={data.courseProgress||{}} exams={getExams()} onAddCourse={addCourse} onUpdateCourse={updateCourse} onDeleteCourse={deleteCourse} onToggleSession={toggleCourseSession} onAddExam={addExam} onUpdateExam={updateExam} onDeleteExam={deleteExam} data={data} s={s} t={t} />}
                         {tab==="projets"   && <ProjectsView projects={getProjects()} data={data} onAddProject={addProject} onUpdateProject={updateProject} onDeleteProject={deleteProject} s={s} t={t} />}
+                        {tab==="budget"    && <BudgetView expenses={getBudgetExpenses()} contributions={getBudgetContribs()} reimbursements={getBudgetReimbs()} settings={getBudgetSettings()} onAddExpense={addBudgetExpense} onUpdateExpense={updateBudgetExpense} onDeleteExpense={deleteBudgetExpense} onAddContribution={addBudgetContrib} onDeleteContribution={deleteBudgetContrib} onUpdateSettings={updateBudgetSettings} onAddReimb={addBudgetReimb} onDeleteReimb={deleteBudgetReimb} visible={budgetVisible} onShow={()=>setBudgetVisible(true)} onHide={()=>setBudgetVisible(false)} s={s} t={t} />}
                     </div>
                 </div>
 
@@ -4728,6 +4755,1112 @@ function QuickAddModal({ tab, setTab, onClose, onAddDay, onAddWeek, onAddTodo, s
                 <div style={{ padding:"8px 18px 12px", display:"flex", gap:16, color:t.textTiny, fontSize:10 }}>
                     <span>{tr("shortcut_add")}</span><span>{tr("shortcut_close")}</span><span style={{ marginLeft:"auto" }}>{tr("shortcut_n")}</span>
                 </div>
+            </div>
+        </div>
+    );
+}
+
+// ── BudgetView ────────────────────────────────────────────────────────────────
+
+const BUDGET_CATS_DATA = [
+    { id:"etudes",   en:"Studies",    fr:"Frais d'études", icon:"🎓" },
+    { id:"admin",    en:"Admin fees", fr:"Frais admin",    icon:"📋" },
+    { id:"bouffe",   en:"Food",       fr:"Alimentation",   icon:"🍔" },
+    { id:"logement", en:"Housing",    fr:"Logement",       icon:"🏠" },
+    { id:"autre",    en:"Other",      fr:"Autre",          icon:"💼" },
+];
+const BUDGET_CATS = BUDGET_CATS_DATA; // kept for CSV compat
+
+const BUDGET_I18N = {
+    en:{
+        tab_overview:"📅 By Month", tab_expenses:"📋 Expenses", tab_contribs:"💸 Contributions", tab_previsionnel:"🎯 Budget Plan",
+        total_expenses:"Total Expenses", my_income:"My Income", balance:"Balance",
+        category_breakdown:"Category Breakdown", shared_balance:"Shared expense balance",
+        recurring:"🔁 Recurring Transfers", one_time:"💸 One-time Contributions",
+        monthly_budget:"Monthly Budgets", annual_budget:"Fixed Expenses (monthly amortized)",
+        add_expense:"+ Expense", add_contrib:"+ Add", configure:"+ Configure",
+        reimburse:"✓ Log reimbursement", close:"✕ Close", save:"Save", cancel:"Cancel",
+        description:"Description *", amount:"Amount *", currency:"Currency", date:"Date",
+        paid_by:"Paid by", category:"Category", shared:"Shared expense (both should have paid)",
+        exclude_balance:"Exclude from balance", maman_share:"Maman's share %", note_opt:"Note (optional)",
+        from:"From", type:"Type",
+        no_data:"No data for this period", no_expense_filter:"No expenses for this filter",
+        no_expense:"No expenses", no_contrib:"No one-time contributions",
+        no_recur:"No recurring transfers — set up monthly transfers from your parents here",
+        no_budget:"No budget set", budget_balanced:"✓ Perfectly balanced — nothing to reimburse!",
+        budget_label:"Monthly budget:", spent_lbl:"spent", over_lbl:"over budget", left_lbl:"remaining",
+        months_left_lbl:"months remaining", at_rate_lbl:"at current rate", of_envelope:"% of envelope",
+        sem_all:"All periods", sem_automne:"Fall", sem_printemps:"Spring",
+        reimb_to:"Reimburse to", reimb_note:"Note", reimb_history:"Reimbursement history",
+        add_annual:"+ Fixed expense", annual_name:"Expense name", annual_year:"",
+        annual_amount:"Annual amount", annual_cat:"Category (optional)",
+        lump:"Lump sum", transfer:"Monthly transfer", income:"Income / Salary",
+        export_csv:"📥 Export", low_balance:"Low Balance", budget_exceeded:"Budget exceeded!",
+        all_categories:"All categories", all_payers:"All payers", sub_total:"Sub-total:",
+        displayed_in:"Displayed in", exchange_rate:"1 CHF =",
+        reimb_papa:"Papa owes you (shared paid by you)", reimb_maman:"Maman owes you (shared paid by you)",
+        owed_to_maman:"Maman underpaid → reimburse her", owed_to_papa:"Papa underpaid → reimburse him",
+        projection_lbl:"months remaining at current rate",
+        already_reimbursed:"already reimbursed", net_owed:"net owed",
+    },
+    fr:{
+        tab_overview:"📅 Par mois", tab_expenses:"📋 Dépenses", tab_contribs:"💸 Contributions", tab_previsionnel:"🎯 Budget prévi",
+        total_expenses:"Total dépenses", my_income:"Mes revenus", balance:"Solde restant",
+        category_breakdown:"Répartition par catégorie", shared_balance:"Balance dépenses partagées",
+        recurring:"🔁 Virements récurrents", one_time:"💸 Contributions ponctuelles",
+        monthly_budget:"Budgets mensuels", annual_budget:"Dépenses fixes (amorties/mois)",
+        add_expense:"+ Dépense", add_contrib:"+ Ajouter", configure:"+ Configurer",
+        reimburse:"✓ Logger un remboursement", close:"✕ Fermer", save:"Enregistrer", cancel:"Annuler",
+        description:"Description *", amount:"Montant *", currency:"Devise", date:"Date",
+        paid_by:"Payé par", category:"Catégorie", shared:"Dépense partagée (les deux auraient dû payer)",
+        exclude_balance:"Exclure de la balance", maman_share:"Part de Maman %", note_opt:"Note (optionnel)",
+        from:"De", type:"Type",
+        no_data:"Aucune donnée pour cette période", no_expense_filter:"Aucune dépense pour ce filtre",
+        no_expense:"Aucune dépense", no_contrib:"Aucune contribution ponctuelle",
+        no_recur:"Aucun virement récurrent — configure ici les virements mensuels de ta mère par exemple",
+        no_budget:"Pas de budget défini", budget_balanced:"✓ Parfaitement équilibré — rien à rembourser !",
+        budget_label:"Budget mensuel :", spent_lbl:"dépensé", over_lbl:"dépassé", left_lbl:"restant",
+        months_left_lbl:"mois restants", at_rate_lbl:"au rythme actuel", of_envelope:"% de l'enveloppe",
+        sem_all:"Toutes périodes", sem_automne:"Automne", sem_printemps:"Printemps",
+        reimb_to:"Rembourser à", reimb_note:"Note", reimb_history:"Historique remboursements",
+        add_annual:"+ Dépense fixe", annual_name:"Nom de la dépense", annual_year:"",
+        annual_amount:"Montant total", annual_cat:"Catégorie (optionnel)",
+        lump:"Somme globale", transfer:"Virement mensuel", income:"Revenu / salaire",
+        export_csv:"📥 Export", low_balance:"Solde bas", budget_exceeded:"Budget dépassé !",
+        all_categories:"Toutes catégories", all_payers:"Tous payeurs", sub_total:"Sous-total :",
+        displayed_in:"Affiché en", exchange_rate:"1 CHF =",
+        reimb_papa:"Papa te doit (partagé payé par toi)", reimb_maman:"Maman te doit (partagé payé par toi)",
+        owed_to_maman:"Papa a sous-payé → tu rembourses à Maman", owed_to_papa:"Maman a sous-payé → tu rembourses à Papa",
+        projection_lbl:"mois restants au rythme actuel",
+        already_reimbursed:"déjà remboursé", net_owed:"reste à rembourser",
+    }
+};
+
+function getBudgetSemesters() {
+    const isEn = typeof _LANG !== "undefined" && _LANG === "en";
+    const y = new Date().getFullYear();
+    const sems = [];
+    for (let yr = y - 1; yr <= y + 1; yr++) {
+        sems.push({ id:`${yr}-automne`,   label:`${isEn?"Fall":"Automne"} ${yr}`,   start:`${yr}-09-01`,   end:`${yr+1}-01-31` });
+        sems.push({ id:`${yr}-printemps`, label:`${isEn?"Spring":"Printemps"} ${yr}`, start:`${yr}-02-01`, end:`${yr}-06-30` });
+    }
+    return sems.sort((a,b) => a.start.localeCompare(b.start));
+}
+
+function genRecurring(recurring) {
+    const result = [];
+    const today = getTodayKey();
+    (recurring || []).forEach(r => {
+        let d = new Date(r.startDate + "T12:00:00");
+        d.setDate(1);
+        const endD = new Date(today + "T12:00:00");
+        while (d <= endD) {
+            const dk = d.toISOString().slice(0,7) + "-01";
+            result.push({ id:`rec_${r.id}_${dk}`, from:r.from, type:"virement", amount:r.amount, inputCurrency:r.inputCurrency, date:dk, note:r.note, isRecurring:true, recurringId:r.id });
+            d.setMonth(d.getMonth() + 1);
+        }
+    });
+    return result;
+}
+
+function exportBudgetCSV(filteredExp, allContribs, toD, DCUR) {
+    const rows = [["Type","Date","Description/Note","Catégorie","Payeur/De","Montant saisi","Devise saisie",`Montant (${DCUR})`,"Partagé","Split Maman%","Exclu balance"]];
+    [...allContribs].sort((a,b)=>a.date.localeCompare(b.date)).forEach(c => {
+        const fromLabel = c.from==="maman"?"Maman":c.from==="moi"?"Moi":c.from==="papa"?"Papa":c.from;
+        rows.push(["Contribution",c.date,c.note||"","",fromLabel,c.amount,c.inputCurrency,toD(c.amount,c.inputCurrency).toFixed(2),"","",""]);
+    });
+    [...filteredExp].sort((a,b)=>a.date.localeCompare(b.date)).forEach(e => {
+        const catObj = BUDGET_CATS.find(c=>c.id===e.category);
+        const cat = (catObj ? (typeof _LANG!=="undefined"&&_LANG==="en" ? catObj.en : catObj.fr) : null) || e.category;
+        const payer = e.paidBy==="maman"?"Maman":e.paidBy==="papa"?"Papa":"Moi";
+        rows.push(["Dépense",e.date,e.description||"",cat,payer,e.amount,e.inputCurrency,toD(e.amount,e.inputCurrency).toFixed(2),e.isShared?"Oui":"Non",e.isShared?(e.splitMaman??50):"",e.isShared&&e.excludeFromBalance?"Oui":""]);
+    });
+    const csv = rows.map(r=>r.map(v=>`"${String(v).replace(/"/g,'""')}"`).join(",")).join("\n");
+    const blob = new Blob(["﻿"+csv],{type:"text/csv;charset=utf-8;"});
+    const a = document.createElement("a"); a.href=URL.createObjectURL(blob); a.download="budget_etudes.csv"; a.click();
+}
+
+function BudgetView({ expenses, contributions, reimbursements, settings, onAddExpense, onUpdateExpense, onDeleteExpense, onAddContribution, onDeleteContribution, onUpdateSettings, onAddReimb, onDeleteReimb, visible, onShow, onHide, s, t }) {
+    const COL  = "#10b981";
+    const RATE = settings.rate || 1.065;
+    const DCUR = settings.displayCurrency || "CHF";
+    const bt   = k => (BUDGET_I18N[typeof _LANG!=="undefined"&&_LANG==="en"?"en":"fr"][k] ?? k);
+    const catLabel = c => c ? (typeof _LANG!=="undefined"&&_LANG==="en" ? c.en : c.fr) : "";
+
+    const [viewTab,          setViewTab]          = useState("overview");
+    const [showExpForm,      setShowExpForm]      = useState(false);
+    const [editExp,          setEditExp]          = useState(null);
+    const [showContrib,      setShowContrib]      = useState(false);
+    const [showRecurForm,    setShowRecurForm]    = useState(false);
+    const [showRateEdit,     setShowRateEdit]     = useState(false);
+    const [rateInput,        setRateInput]        = useState(String(RATE));
+    const [filterCat,        setFilterCat]        = useState("all");
+    const [filterPayer,      setFilterPayer]      = useState("all");
+    const [semester,         setSemester]         = useState("all");
+    const [expandedMonths,   setExpandedMonths]   = useState({});
+    const [showReimbForm,    setShowReimbForm]     = useState(null); // null | "maman" | "papa" | "moi"
+    const [showAnnualForm,   setShowAnnualForm]    = useState(false);
+
+    // Keyboard shortcut: d → open add expense
+    useEffect(() => {
+        if (!visible) return;
+        const handler = ev => {
+            if (ev.key !== "d") return;
+            if (ev.target.matches("input,textarea,select")) return;
+            setViewTab("depenses"); setEditExp(null); setShowExpForm(true);
+        };
+        window.addEventListener("keydown", handler);
+        return () => window.removeEventListener("keydown", handler);
+    }, [visible]);
+
+    const toD = (amount, inCur) => {
+        if (inCur === DCUR) return amount;
+        if (inCur === "CHF" && DCUR === "EUR") return amount * RATE;
+        return amount / RATE;
+    };
+
+    const fmt = (n) => {
+        const v = Math.abs(n).toLocaleString("fr-FR", { minimumFractionDigits:2, maximumFractionDigits:2 });
+        return DCUR === "EUR" ? `${v} €` : `${v} CHF`;
+    };
+
+    const semesters = getBudgetSemesters();
+    const recurringContribs = settings.recurringContribs || [];
+    const virtualContribs   = genRecurring(recurringContribs);
+    const allContribs       = [...contributions, ...virtualContribs];
+    const categoryBudgets   = settings.categoryBudgets || {};
+
+    // Semester filter
+    const semInfo = semesters.find(s => s.id === semester);
+    const inSem = (dateStr) => !semInfo || (dateStr >= semInfo.start && dateStr <= semInfo.end);
+
+    const filteredExpenses = expenses.filter(e => inSem(e.date));
+    const filteredContribs = allContribs.filter(c => inSem(c.date));
+
+    // Totals
+    const totalExp     = filteredExpenses.reduce((sum, e) => sum + toD(e.amount, e.inputCurrency), 0);
+    const mamanContrib = filteredContribs.filter(c => c.from==="maman").reduce((sum, c) => sum + toD(c.amount, c.inputCurrency), 0);
+    const papaContrib  = filteredContribs.filter(c => c.from==="papa").reduce((sum, c) => sum + toD(c.amount, c.inputCurrency), 0);
+    const moiContrib   = filteredContribs.filter(c => c.from==="moi").reduce((sum, c) => sum + toD(c.amount, c.inputCurrency), 0);
+    const totalContrib = mamanContrib + papaContrib + moiContrib;
+    const remaining    = totalContrib - totalExp;
+    // Papa all-time (not filtered by semester) for the budget gauge
+    const papaTotal    = allContribs.filter(c => c.from==="papa").reduce((sum, c) => sum + toD(c.amount, c.inputCurrency), 0);
+
+    // Balance (shared expenses only — maman vs papa vs moi)
+    let papaDebt = 0, mamanDebt = 0, moiDebtFromMaman = 0, moiDebtFromPapa = 0;
+    filteredExpenses.filter(e => e.isShared && !e.excludeFromBalance).forEach(e => {
+        const amt = toD(e.amount, e.inputCurrency);
+        const sm  = e.splitMaman ?? 50;
+        if (e.paidBy === "maman") papaDebt        += amt * (100-sm) / 100;
+        if (e.paidBy === "papa")  mamanDebt        += amt * sm / 100;
+        if (e.paidBy === "moi")  { moiDebtFromMaman += amt * sm / 100; moiDebtFromPapa += amt * (100-sm) / 100; }
+    });
+    const netBalance = papaDebt - mamanDebt;
+
+    // Category breakdown
+    const CAT_COLORS = { etudes:"#60a5fa", admin:"#a78bfa", bouffe:"#fb923c", logement:"#34d399", autre:"#f472b6" };
+    const catTotals = BUDGET_CATS.map(cat => ({
+        ...cat,
+        total: filteredExpenses.filter(e=>e.category===cat.id).reduce((s,e)=>s+toD(e.amount,e.inputCurrency),0),
+        color: CAT_COLORS[cat.id] || COL,
+    })).filter(c => c.total > 0).sort((a,b) => b.total-a.total);
+
+    // Monthly grouping
+    const monthMap = {};
+    filteredExpenses.forEach(e => {
+        const mk = e.date.slice(0,7);
+        if (!monthMap[mk]) monthMap[mk] = { expenses:[], contribs:[] };
+        monthMap[mk].expenses.push(e);
+    });
+    filteredContribs.forEach(c => {
+        const mk = c.date.slice(0,7);
+        if (!monthMap[mk]) monthMap[mk] = { expenses:[], contribs:[] };
+        monthMap[mk].contribs.push(c);
+    });
+    const months = Object.keys(monthMap).sort().reverse();
+
+    // Projection — moyenne des 3 derniers mois complets
+    const curMonth = getTodayKey().slice(0,7);
+    const completedMonths = months.filter(mk => mk < curMonth);
+    const last3 = completedMonths.slice(0, 3);
+    const avgMonthly = last3.length > 0
+        ? last3.reduce((s,mk) => s + monthMap[mk].expenses.reduce((ss,e) => ss + toD(e.amount,e.inputCurrency), 0), 0) / last3.length
+        : 0;
+    const monthsLeft = avgMonthly > 0 && remaining > 0 ? remaining / avgMonthly : null;
+
+    // Alert threshold
+    const alertThreshold = toD(settings.alertThreshold ?? 500, "CHF");
+
+    // Reimbursements
+    const reimbs = reimbursements || [];
+    const reimbToMaman = reimbs.filter(r=>r.to==="maman").reduce((s,r)=>s+toD(r.amount,r.currency),0);
+    const reimbToPapa  = reimbs.filter(r=>r.to==="papa").reduce((s,r)=>s+toD(r.amount,r.currency),0);
+    const reimbToMoi   = reimbs.filter(r=>r.to==="moi").reduce((s,r)=>s+toD(r.amount,r.currency),0);
+    const netOwedToMaman = Math.max(0, netBalance - reimbToMaman);
+    const netOwedToPapa  = Math.max(0, -netBalance - reimbToPapa);
+    const netMoiFromMaman = Math.max(0, moiDebtFromMaman - reimbToMoi);
+    const netMoiFromPapa  = Math.max(0, moiDebtFromPapa  - reimbToMoi);
+
+    // Fixed expenses amortized monthly (TL, frais scolarité, etc.)
+    const fixedExpenses = settings.fixedExpenses || [];
+    const totalMonthlyFixed = fixedExpenses.reduce((s,f) => s + toD(f.amount, f.currency||"CHF") / (f.amortizeMonths||12), 0);
+    const totalMonthlyCats  = BUDGET_CATS_DATA.reduce((s,c) => s + toD(categoryBudgets[c.id]||0,"CHF"), 0);
+    const totalMonthlyBudget = totalMonthlyCats + totalMonthlyFixed;
+
+    const visibleExp = filteredExpenses
+        .filter(e => (filterCat==="all"||e.category===filterCat) && (filterPayer==="all"||e.paidBy===filterPayer))
+        .sort((a,b) => b.date.localeCompare(a.date));
+
+    const TAB_BTN = (id, label) => (
+        <button key={id} onClick={()=>setViewTab(id)}
+                style={{ padding:"7px 16px", borderRadius:20, border:`1px solid ${viewTab===id?"rgba(16,185,129,0.5)":t.filterBdr}`, background:viewTab===id?"rgba(16,185,129,0.12)":"transparent", color:viewTab===id?COL:t.textSub, fontSize:12, cursor:"pointer", fontWeight:viewTab===id?700:400 }}>
+            {label}
+        </button>
+    );
+
+    if (!visible) return (
+        <div style={{ display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", height:"60vh", gap:16 }}>
+            <div style={{ fontSize:52, filter:"blur(3px)", userSelect:"none" }}>💰</div>
+            <div style={{ fontSize:16, fontWeight:700, color:t.text }}>Budget Études</div>
+            <div style={{ fontSize:13, color:t.textSub, textAlign:"center", maxWidth:300, lineHeight:1.7 }}>
+                Cette section contient des informations financières personnelles.
+            </div>
+            <button onClick={onShow}
+                    style={{ padding:"11px 28px", borderRadius:12, border:`1px solid rgba(16,185,129,0.4)`, background:"rgba(16,185,129,0.12)", color:COL, fontSize:14, fontWeight:700, cursor:"pointer", marginTop:8 }}>
+                👁 Voir le budget
+            </button>
+        </div>
+    );
+
+    return (
+        <div style={{ display:"grid", gap:16 }}>
+
+            {/* ── Top bar ── */}
+            <div style={{ display:"flex", gap:8, alignItems:"center", flexWrap:"wrap" }}>
+                <button onClick={onHide}
+                        style={{ padding:"7px 14px", borderRadius:10, border:`1px solid ${t.inpBdr}`, background:"transparent", color:t.textSub, fontSize:12, cursor:"pointer", fontWeight:600 }}>
+                    🙈 Masquer
+                </button>
+                <button onClick={() => onUpdateSettings({ displayCurrency: DCUR==="EUR"?"CHF":"EUR" })}
+                        style={{ padding:"7px 16px", borderRadius:10, border:`1px solid rgba(16,185,129,0.4)`, background:"rgba(16,185,129,0.1)", color:COL, fontSize:13, fontWeight:700, cursor:"pointer" }}>
+                    {DCUR==="EUR" ? "€ EUR → CHF" : "CHF → € EUR"}
+                </button>
+                <div style={{ display:"flex", alignItems:"center", gap:6, fontSize:11, color:t.textSub }}>
+                    <span>1 CHF =</span>
+                    {showRateEdit
+                        ? <input autoFocus type="number" step="0.001" value={rateInput}
+                                 onChange={e=>setRateInput(e.target.value)}
+                                 onBlur={()=>{ const v=parseFloat(rateInput); if(v>0) onUpdateSettings({rate:v}); setShowRateEdit(false); }}
+                                 onKeyDown={e=>{ if(e.key==="Enter"){const v=parseFloat(rateInput);if(v>0)onUpdateSettings({rate:v});setShowRateEdit(false);}if(e.key==="Escape")setShowRateEdit(false); }}
+                                 style={{ ...s.input, width:70, fontSize:12, padding:"3px 8px" }} />
+                        : <button onClick={()=>{ setRateInput(String(RATE)); setShowRateEdit(true); }}
+                                  style={{ background:"none", border:`1px solid ${t.inpBdr}`, borderRadius:7, color:t.textSub, cursor:"pointer", fontSize:11, padding:"3px 9px" }}>
+                            {RATE.toFixed(3)} EUR
+                          </button>
+                    }
+                </div>
+                <select value={semester} onChange={e=>setSemester(e.target.value)}
+                        style={{ ...s.sel, fontSize:11, padding:"5px 10px" }}>
+                    <option value="all">Toute la période</option>
+                    {semesters.map(sem=><option key={sem.id} value={sem.id}>{sem.label}</option>)}
+                </select>
+                <button onClick={()=>exportBudgetCSV(filteredExpenses, filteredContribs, toD, DCUR)}
+                        style={{ padding:"7px 12px", borderRadius:10, border:`1px solid ${t.inpBdr}`, background:"transparent", color:t.textSub, fontSize:11, cursor:"pointer", fontWeight:600, whiteSpace:"nowrap" }}>
+                    📥 Export CSV
+                </button>
+                <div style={{ marginLeft:"auto", fontSize:11, color:t.textDim }}>Affiché en <strong style={{color:COL}}>{DCUR}</strong></div>
+            </div>
+
+            {/* ── Summary cards ── */}
+            <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(140px,1fr))", gap:10 }}>
+                {[
+                    { label:bt("total_expenses"), value:totalExp,     color:"#f97316", icon:"📤" },
+                    { label:"Papa",               value:papaContrib,  color:"#60a5fa", icon:"💙" },
+                    { label:"Maman",              value:mamanContrib, color:"#f472b6", icon:"💗" },
+                    { label:bt("my_income"),      value:moiContrib,   color:"#a78bfa", icon:"🙋" },
+                    { label:bt("balance"),        value:remaining,    color:remaining>=0?COL:"#f87171", icon:"💳" },
+                ].map(({ label, value, color, icon }) => (
+                    <div key={label} style={{ ...s.card, padding:"13px 15px", display:"flex", flexDirection:"column", gap:5 }}>
+                        <div style={{ fontSize:11, color:t.textSub }}>{icon} {label}</div>
+                        <div style={{ fontSize:17, fontWeight:800, color, letterSpacing:"-0.5px", lineHeight:1.1 }}>{fmt(value)}</div>
+                    </div>
+                ))}
+            </div>
+
+            {/* ── Papa budget gauge ── */}
+            {papaTotal > 0 && (
+                <div style={{ ...s.card, padding:"14px 18px" }}>
+                    <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:10 }}>
+                        <div style={{ fontSize:12, fontWeight:700, color:t.text }}>💙 Budget Papa — suivi de l'enveloppe</div>
+                        <div style={{ fontSize:12, fontWeight:800, color:remaining>=0?COL:"#f87171" }}>
+                            {remaining>=0 ? `${fmt(remaining)} restant` : `${fmt(Math.abs(remaining))} de dépassement`}
+                        </div>
+                    </div>
+                    <div style={{ background:t.cardBdr, borderRadius:20, height:12, overflow:"hidden", marginBottom:8 }}>
+                        <div style={{
+                            width:`${Math.min(100, totalContrib>0 ? totalExp/totalContrib*100 : 0)}%`,
+                            height:"100%", borderRadius:20, transition:"width 0.5s ease",
+                            background: totalExp/totalContrib > 0.9 ? "#f87171" : totalExp/totalContrib > 0.75 ? "#f97316" : COL
+                        }} />
+                    </div>
+                    <div style={{ display:"flex", justifyContent:"space-between", fontSize:11, color:t.textSub }}>
+                        <span>Dépensé : <strong style={{color:t.text}}>{fmt(totalExp)}</strong></span>
+                        <span style={{ color:t.textTiny }}>{totalContrib>0?(totalExp/totalContrib*100).toFixed(0):0}% de l'enveloppe</span>
+                        <span>Reçu au total : <strong style={{color:t.text}}>{fmt(totalContrib)}</strong></span>
+                    </div>
+                    {monthsLeft !== null && avgMonthly > 0 && (
+                        <div style={{ marginTop:8, padding:"7px 10px", borderRadius:8, background: monthsLeft<2?"rgba(248,113,113,0.08)":monthsLeft<4?"rgba(249,115,22,0.08)":"rgba(16,185,129,0.06)", border:`1px solid ${monthsLeft<2?"rgba(248,113,113,0.2)":monthsLeft<4?"rgba(249,115,22,0.2)":"rgba(16,185,129,0.1)"}` }}>
+                            <div style={{ fontSize:11, color:t.textSub }}>
+                                📊 <strong style={{ color: monthsLeft<2?"#f87171":monthsLeft<4?"#f97316":COL }}>
+                                    {monthsLeft < 1 ? `moins d'un mois` : `~${monthsLeft.toFixed(1)} mois`} restants
+                                </strong>
+                                {" "}au rythme actuel ({fmt(avgMonthly)}/mois sur {last3.length} mois)
+                            </div>
+                        </div>
+                    )}
+                    {(papaContrib > 0 || mamanContrib > 0 || moiContrib > 0) && (
+                        <div style={{ marginTop:8, fontSize:11, color:t.textDim, borderTop:`1px solid ${t.divider}`, paddingTop:7, display:"flex", gap:12, flexWrap:"wrap" }}>
+                            {papaContrib>0  && <span>💙 Papa : <strong style={{color:"#60a5fa"}}>{fmt(papaContrib)}</strong></span>}
+                            {mamanContrib>0 && <span>💗 Maman : <strong style={{color:"#f472b6"}}>{fmt(mamanContrib)}</strong></span>}
+                            {moiContrib>0   && <span>🙋 Moi : <strong style={{color:"#a78bfa"}}>{fmt(moiContrib)}</strong></span>}
+                        </div>
+                    )}
+                </div>
+            )}
+
+            {/* ── Alert banner ── */}
+            {totalContrib > 0 && remaining < alertThreshold && (
+                <div style={{ ...s.card, padding:"12px 18px", borderLeft:`3px solid ${remaining < 0 ? "#f87171" : "#f97316"}`, display:"flex", alignItems:"center", gap:12 }}>
+                    <span style={{ fontSize:22, flexShrink:0 }}>{remaining < 0 ? "🚨" : "⚠️"}</span>
+                    <div style={{ flex:1 }}>
+                        <div style={{ fontSize:12, fontWeight:700, color:remaining<0?"#f87171":"#f97316", marginBottom:2 }}>
+                            {remaining < 0 ? "Budget dépassé !" : "Solde bas"}
+                        </div>
+                        <div style={{ fontSize:11, color:t.textSub }}>
+                            {remaining < 0
+                                ? `Tu as dépensé ${fmt(Math.abs(remaining))} de plus que ce que tu as reçu.`
+                                : `Il te reste seulement ${fmt(remaining)}${monthsLeft ? ` — environ ${monthsLeft.toFixed(1)} mois au rythme actuel` : ""}.`
+                            }
+                        </div>
+                    </div>
+                    <button onClick={()=>onUpdateSettings({alertThreshold:(settings.alertThreshold??500)<=0?500:0})}
+                            title="Désactiver l'alerte"
+                            style={{ background:"none", border:"none", color:t.textTiny, cursor:"pointer", fontSize:13, padding:"2px 4px", flexShrink:0, opacity:0.5 }}
+                            onMouseEnter={e=>e.currentTarget.style.opacity="1"} onMouseLeave={e=>e.currentTarget.style.opacity="0.5"}>✕</button>
+                </div>
+            )}
+
+            {/* ── Category breakdown — donut chart ── */}
+            {catTotals.length > 0 && (() => {
+                const SIZE = 130, CX = SIZE/2, CY = SIZE/2, R = 54, r = 34;
+                const pToC = (cx,cy,rad,deg) => { const a=(deg-90)*Math.PI/180; return {x:cx+rad*Math.cos(a),y:cy+rad*Math.sin(a)}; };
+                const arc  = (cx,cy,Ro,Ri,s,e) => {
+                    const p1=pToC(cx,cy,Ro,s),p2=pToC(cx,cy,Ro,e),p3=pToC(cx,cy,Ri,e),p4=pToC(cx,cy,Ri,s);
+                    const lg=e-s>180?1:0;
+                    return `M${p1.x} ${p1.y} A${Ro} ${Ro} 0 ${lg} 1 ${p2.x} ${p2.y} L${p3.x} ${p3.y} A${Ri} ${Ri} 0 ${lg} 0 ${p4.x} ${p4.y}Z`;
+                };
+                let cur = 0;
+                const slices = catTotals.map(cat => {
+                    const deg = totalExp > 0 ? cat.total/totalExp*360 : 0;
+                    const s = cur, e = cur + deg - 0.5;
+                    cur += deg;
+                    return { ...cat, s, e, deg };
+                });
+                return (
+                    <div style={{ ...s.card, padding:"14px 18px" }}>
+                        <div style={{ fontSize:12, fontWeight:700, color:t.text, marginBottom:12 }}>Répartition par catégorie</div>
+                        <div style={{ display:"flex", gap:20, alignItems:"center", flexWrap:"wrap" }}>
+                            <svg width={SIZE} height={SIZE} viewBox={`0 0 ${SIZE} ${SIZE}`} style={{ flexShrink:0 }}>
+                                {slices.map(sl => sl.deg > 0.5 && (
+                                    <path key={sl.id} d={arc(CX,CY,R,r,sl.s,sl.e)} fill={sl.color} opacity={0.9} />
+                                ))}
+                                <circle cx={CX} cy={CY} r={r-2} fill={t.card} />
+                                <text x={CX} y={CY-7} textAnchor="middle" fill={t.text} fontSize={11} fontWeight={700}>{catTotals.length}</text>
+                                <text x={CX} y={CY+8} textAnchor="middle" fill={t.textSub} fontSize={9}>catégories</text>
+                            </svg>
+                            <div style={{ flex:1, display:"grid", gap:7, minWidth:160 }}>
+                                {catTotals.map(cat => {
+                                    const pct = totalExp > 0 ? cat.total/totalExp*100 : 0;
+                                    const budgetAmt = toD(categoryBudgets[cat.id]||0,"CHF");
+                                    const over = budgetAmt > 0 && cat.total > budgetAmt;
+                                    return (
+                                        <div key={cat.id} style={{ display:"flex", alignItems:"center", gap:8 }}>
+                                            <div style={{ width:10, height:10, borderRadius:3, background:cat.color, flexShrink:0 }} />
+                                            <span style={{ fontSize:11, color:t.textSub, flex:1 }}>{cat.icon} {catLabel(cat)}</span>
+                                            <span style={{ fontSize:11, color:over?"#f87171":t.textTiny }}>{pct.toFixed(0)}%</span>
+                                            <span style={{ fontSize:12, fontWeight:700, color:over?"#f87171":t.text }}>{fmt(cat.total)}</span>
+                                            {over && <span style={{ fontSize:9, color:"#f87171" }}>▲</span>}
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        </div>
+                    </div>
+                );
+            })()}
+
+            {/* ── Shared balance + reimbursements ── */}
+            {(papaDebt > 0 || mamanDebt > 0 || moiDebtFromMaman > 0 || moiDebtFromPapa > 0) && (
+                <div style={{ ...s.card, padding:"13px 18px", borderLeft:`3px solid ${netOwedToMaman<0.5&&netOwedToPapa<0.5&&netMoiFromMaman<0.5&&netMoiFromPapa<0.5?COL:"#f97316"}` }}>
+                    <div style={{ display:"flex", alignItems:"center", gap:12 }}>
+                        <span style={{ fontSize:20, flexShrink:0 }}>⚖️</span>
+                        <div style={{ flex:1 }}>
+                            <div style={{ fontSize:12, fontWeight:700, color:t.text, marginBottom:4 }}>{bt("shared_balance")}</div>
+                            {(papaDebt > 0 || mamanDebt > 0) && (
+                                netOwedToMaman < 0.5 && netOwedToPapa < 0.5
+                                    ? <div style={{ fontSize:12, color:COL }}>{bt("budget_balanced")}</div>
+                                    : netBalance > 0
+                                        ? <div style={{ fontSize:12, color:t.textSub }}>{bt("owed_to_maman")} <strong style={{color:COL}}>{fmt(netOwedToMaman)}</strong>
+                                            {reimbToMaman > 0.5 && <span style={{ color:t.textTiny }}> ({bt("already_reimbursed")}: {fmt(reimbToMaman)})</span>}
+                                          </div>
+                                        : <div style={{ fontSize:12, color:t.textSub }}>{bt("owed_to_papa")} <strong style={{color:COL}}>{fmt(netOwedToPapa)}</strong>
+                                            {reimbToPapa > 0.5 && <span style={{ color:t.textTiny }}> ({bt("already_reimbursed")}: {fmt(reimbToPapa)})</span>}
+                                          </div>
+                            )}
+                            {netMoiFromMaman > 0.5 && <div style={{ fontSize:12, color:t.textSub, marginTop:2 }}>💗 {bt("reimb_maman")}: <strong style={{color:"#f472b6"}}>{fmt(netMoiFromMaman)}</strong></div>}
+                            {netMoiFromPapa  > 0.5 && <div style={{ fontSize:12, color:t.textSub, marginTop:2 }}>💙 {bt("reimb_papa")}: <strong style={{color:"#60a5fa"}}>{fmt(netMoiFromPapa)}</strong></div>}
+                        </div>
+                        <div style={{ display:"flex", flexDirection:"column", gap:4, flexShrink:0, alignItems:"flex-end" }}>
+                            <div style={{ fontSize:18, fontWeight:900, color:netOwedToMaman<0.5&&netOwedToPapa<0.5?COL:"#f97316" }}>
+                                {netOwedToMaman<0.5&&netOwedToPapa<0.5&&netMoiFromMaman<0.5&&netMoiFromPapa<0.5 ? "✓" : fmt(Math.max(netOwedToMaman,netOwedToPapa,netMoiFromMaman,netMoiFromPapa))}
+                            </div>
+                            {(netOwedToMaman>0.5||netOwedToPapa>0.5||netMoiFromMaman>0.5||netMoiFromPapa>0.5) && (
+                                <button onClick={()=>setShowReimbForm(v=>v?null:"open")}
+                                        style={{ padding:"4px 10px", borderRadius:8, border:`1px solid rgba(16,185,129,0.4)`, background:"rgba(16,185,129,0.08)", color:COL, fontSize:10, cursor:"pointer", fontWeight:700, whiteSpace:"nowrap" }}>
+                                    {showReimbForm ? "✕" : bt("reimburse")}
+                                </button>
+                            )}
+                        </div>
+                    </div>
+                    {showReimbForm === "open" && (
+                        <div style={{ marginTop:10, paddingTop:10, borderTop:`1px solid ${t.divider}`, display:"grid", gap:8 }}>
+                            <ReimbForm
+                                netToMaman={netOwedToMaman} netToPapa={netOwedToPapa}
+                                netFromMaman={netMoiFromMaman} netFromPapa={netMoiFromPapa}
+                                DCUR={DCUR} bt={bt}
+                                onSave={r=>{ onAddReimb({...r, id:uid(), date:getTodayKey(), currency:DCUR}); setShowReimbForm(null); }}
+                                onCancel={()=>setShowReimbForm(null)} s={s} t={t} COL={COL} fmt={fmt} />
+                        </div>
+                    )}
+                    {reimbs.length > 0 && (
+                        <div style={{ marginTop:10, paddingTop:10, borderTop:`1px solid ${t.divider}` }}>
+                            <div style={{ fontSize:10, fontWeight:700, color:t.textSub, marginBottom:6 }}>{bt("reimb_history")}</div>
+                            {reimbs.map(r=>(
+                                <div key={r.id} style={{ display:"flex", gap:8, alignItems:"center", fontSize:11, color:t.textDim, padding:"2px 0" }}>
+                                    <span>{r.date}</span>
+                                    <span>→ {r.to==="maman"?"💗 Maman":r.to==="papa"?"💙 Papa":"🙋"}</span>
+                                    <span style={{ fontWeight:700, color:COL }}>{fmt(toD(r.amount,r.currency))}</span>
+                                    {r.note && <span style={{ flex:1, fontStyle:"italic", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{r.note}</span>}
+                                    <button onClick={()=>onDeleteReimb(r.id)} style={{ background:"none", border:"none", color:t.delColor, cursor:"pointer", fontSize:11, opacity:0.4, padding:"0 2px" }}
+                                            onMouseEnter={e=>e.currentTarget.style.opacity="1"} onMouseLeave={e=>e.currentTarget.style.opacity="0.4"}>✕</button>
+                                </div>
+                            ))}
+                        </div>
+                    )}
+                </div>
+            )}
+
+            {/* ── Internal tabs ── */}
+            <div style={{ display:"flex", gap:6, flexWrap:"wrap" }}>
+                {TAB_BTN("overview",      bt("tab_overview"))}
+                {TAB_BTN("depenses",      bt("tab_expenses"))}
+                {TAB_BTN("contributions", bt("tab_contribs"))}
+                {TAB_BTN("previsionnel",  bt("tab_previsionnel"))}
+            </div>
+
+            {/* ── Tab: Par mois ── */}
+            {viewTab==="overview" && (
+                <div style={{ display:"grid", gap:8 }}>
+                    {months.length===0 && <div style={{ textAlign:"center", color:t.textTiny, padding:"28px 0", fontSize:13 }}>Aucune donnée pour cette période</div>}
+                    {months.map(mk => {
+                        const { expenses:mExp, contribs:mCon } = monthMap[mk];
+                        const mTotal = mExp.reduce((s,e)=>s+toD(e.amount,e.inputCurrency),0);
+                        const mRecv  = mCon.reduce((s,c)=>s+toD(c.amount,c.inputCurrency),0);
+                        const isOpen = expandedMonths[mk] !== false;
+                        const [yr, mo] = mk.split("-");
+                        const mLabel = new Date(Number(yr),Number(mo)-1,1).toLocaleDateString("fr-FR",{month:"long",year:"numeric"});
+                        return (
+                            <div key={mk} style={{ ...s.card, overflow:"hidden" }}>
+                                <div onClick={()=>setExpandedMonths(p=>({...p,[mk]:!isOpen}))}
+                                     style={{ padding:"12px 16px", display:"flex", alignItems:"center", gap:12, cursor:"pointer" }}>
+                                    <span style={{ fontSize:12, fontWeight:700, color:t.text, flex:1, textTransform:"capitalize" }}>{mLabel}</span>
+                                    {mRecv>0 && <span style={{ fontSize:11, color:COL, fontWeight:600 }}>+{fmt(mRecv)} reçu</span>}
+                                    <span style={{ fontSize:12, fontWeight:700, color:"#f97316" }}>−{fmt(mTotal)}</span>
+                                    <span style={{ fontSize:12, fontWeight:700, color:mRecv-mTotal>=0?COL:"#f87171" }}>{mRecv-mTotal>=0?"Net +":"Net −"}{fmt(Math.abs(mRecv-mTotal))}</span>
+                                    <span style={{ fontSize:11, color:t.textTiny }}>{isOpen?"▲":"▼"}</span>
+                                </div>
+                                {isOpen && (
+                                    <div style={{ borderTop:`1px solid ${t.divider}`, padding:"8px 16px 12px", display:"grid", gap:4 }}>
+                                        {mCon.map(c=>{
+                                            const cIcon = c.from==="maman"?"💗":c.from==="moi"?"🙋":"💙";
+                                            const cName = c.from==="maman"?"Maman":c.from==="moi"?"Moi":c.from==="papa"?"Papa":c.from;
+                                            return (
+                                                <div key={c.id} style={{ display:"flex", gap:8, alignItems:"center", padding:"4px 0" }}>
+                                                    <span style={{ fontSize:13 }}>{cIcon}</span>
+                                                    <span style={{ flex:1, fontSize:12, color:t.textSub }}>{cName}{c.note?` — ${c.note}`:""}{c.isRecurring?" (récurrent)":""}</span>
+                                                    <span style={{ fontSize:12, fontWeight:700, color:COL }}>+{fmt(toD(c.amount,c.inputCurrency))}</span>
+                                                </div>
+                                            );
+                                        })}
+                                        {mExp.map(e=>{
+                                            const cat=BUDGET_CATS.find(c=>c.id===e.category);
+                                            const pc=e.paidBy==="maman"?"#f472b6":e.paidBy==="papa"?"#60a5fa":COL;
+                                            return (
+                                                <div key={e.id} style={{ display:"flex", gap:8, alignItems:"center", padding:"4px 0" }}>
+                                                    <span style={{ fontSize:13 }}>{cat?.icon||"💼"}</span>
+                                                    <span style={{ flex:1, fontSize:12, color:t.text }}>{e.description}</span>
+                                                    <span style={{ fontSize:10, padding:"1px 6px", borderRadius:20, background:`${pc}18`, color:pc }}>{e.paidBy==="maman"?"Maman":e.paidBy==="papa"?"Papa":"Moi"}</span>
+                                                    <span style={{ fontSize:12, fontWeight:700, color:t.text }}>−{fmt(toD(e.amount,e.inputCurrency))}</span>
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
+                                )}
+                            </div>
+                        );
+                    })}
+                </div>
+            )}
+
+            {/* ── Tab: Dépenses ── */}
+            {viewTab==="depenses" && (
+                <div style={{ display:"grid", gap:10 }}>
+                    <div style={{ display:"flex", alignItems:"center", gap:8, flexWrap:"wrap" }}>
+                        <select value={filterCat} onChange={e=>setFilterCat(e.target.value)} style={{ ...s.sel, fontSize:11, padding:"4px 8px" }}>
+                            <option value="all">Toutes catégories</option>
+                            {BUDGET_CATS.map(c=><option key={c.id} value={c.id}>{c.icon} {catLabel(c)}</option>)}
+                        </select>
+                        <select value={filterPayer} onChange={e=>setFilterPayer(e.target.value)} style={{ ...s.sel, fontSize:11, padding:"4px 8px" }}>
+                            <option value="all">Tous payeurs</option>
+                            <option value="maman">💗 Maman</option>
+                            <option value="papa">💙 Papa</option>
+                            <option value="moi">🙋 Moi</option>
+                        </select>
+                        {(filterCat!=="all"||filterPayer!=="all") && (
+                            <span style={{ fontSize:12, color:t.textSub }}>Sous-total : <strong style={{color:t.text}}>{fmt(visibleExp.reduce((s,e)=>s+toD(e.amount,e.inputCurrency),0))}</strong></span>
+                        )}
+                        <button onClick={()=>{ if(showExpForm&&!editExp){setShowExpForm(false);}else{setEditExp(null);setShowExpForm(true);} }}
+                                style={{ padding:"5px 14px", borderRadius:8, border:`1px solid rgba(16,185,129,0.35)`, background:"rgba(16,185,129,0.08)", color:COL, fontSize:11, cursor:"pointer", fontWeight:700, whiteSpace:"nowrap", marginLeft:"auto" }}>
+                            {showExpForm&&!editExp?"✕ Fermer":"+ Dépense"}
+                        </button>
+                    </div>
+                    {showExpForm && (
+                        <ExpenseForm key={editExp?.id||"new"} initialData={editExp}
+                            onSave={exp=>{ if(editExp) onUpdateExpense(editExp.id,exp); else onAddExpense({...exp,id:uid()}); setShowExpForm(false);setEditExp(null); }}
+                            onCancel={()=>{setShowExpForm(false);setEditExp(null);}} s={s} t={t} COL={COL} />
+                    )}
+                    <div style={{ display:"grid", gap:6 }}>
+                        {visibleExp.length===0 && <div style={{ textAlign:"center", color:t.textTiny, padding:"28px 0", fontSize:13 }}>Aucune dépense{filterCat!=="all"||filterPayer!=="all"?" pour ce filtre":""}</div>}
+                        {visibleExp.map(e => {
+                            const cat=BUDGET_CATS.find(c=>c.id===e.category);
+                            const pc=e.paidBy==="maman"?"#f472b6":e.paidBy==="papa"?"#60a5fa":COL;
+                            const pl=e.paidBy==="maman"?"Maman":e.paidBy==="papa"?"Papa":"Moi";
+                            return (
+                                <div key={e.id} style={{ ...s.card, padding:"10px 14px", display:"flex", gap:10, alignItems:"center" }}>
+                                    <span style={{ fontSize:18, flexShrink:0 }}>{cat?.icon||"💼"}</span>
+                                    <div style={{ flex:1, minWidth:0 }}>
+                                        <div style={{ fontSize:12, fontWeight:600, color:t.text, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{e.description}</div>
+                                        <div style={{ display:"flex", gap:6, marginTop:3, flexWrap:"wrap", alignItems:"center" }}>
+                                            <span style={{ fontSize:10, color:t.textSub }}>{e.date}</span>
+                                            <span style={{ fontSize:10, padding:"1px 7px", borderRadius:20, background:"rgba(16,185,129,0.08)", color:COL, border:"1px solid rgba(16,185,129,0.2)" }}>{catLabel(cat)||e.category}</span>
+                                            <span style={{ fontSize:10, padding:"1px 7px", borderRadius:20, background:`${pc}18`, color:pc }}>{pl}</span>
+                                            {e.isShared && <span style={{ fontSize:10, color:t.textTiny }}>⚖️ {e.splitMaman??50}%/{100-(e.splitMaman??50)}%{e.excludeFromBalance?" · exclu":""}</span>}
+                                            {e.note && <span style={{ fontSize:10, color:t.textDim, fontStyle:"italic" }}>"{e.note}"</span>}
+                                        </div>
+                                    </div>
+                                    <div style={{ flexShrink:0, textAlign:"right" }}>
+                                        <div style={{ fontSize:13, fontWeight:800, color:t.text }}>{fmt(toD(e.amount,e.inputCurrency))}</div>
+                                        {e.inputCurrency!==DCUR && <div style={{ fontSize:9, color:t.textTiny }}>{e.amount.toLocaleString("fr-FR",{minimumFractionDigits:2,maximumFractionDigits:2})} {e.inputCurrency}</div>}
+                                    </div>
+                                    <div style={{ display:"flex", flexDirection:"column", gap:2, flexShrink:0 }}>
+                                        <button onClick={()=>{setEditExp(e);setShowExpForm(true);}}
+                                                title="Modifier / Edit"
+                                                style={{ background:"none", border:"none", color:t.textSub, cursor:"pointer", fontSize:11, opacity:0.45, padding:"2px 4px" }}
+                                                onMouseEnter={el=>el.currentTarget.style.opacity="1"} onMouseLeave={el=>el.currentTarget.style.opacity="0.45"}>✏️</button>
+                                        <button onClick={()=>onAddExpense({...e, id:uid(), date:getTodayKey()})}
+                                                title="Dupliquer / Duplicate"
+                                                style={{ background:"none", border:"none", color:t.textSub, cursor:"pointer", fontSize:11, opacity:0.4, padding:"2px 4px" }}
+                                                onMouseEnter={el=>el.currentTarget.style.opacity="1"} onMouseLeave={el=>el.currentTarget.style.opacity="0.4"}>⧉</button>
+                                        <button onClick={()=>onDeleteExpense(e.id)}
+                                                style={{ background:"none", border:"none", color:t.delColor, cursor:"pointer", fontSize:11, opacity:0.4, padding:"2px 4px" }}
+                                                onMouseEnter={el=>el.currentTarget.style.opacity="1"} onMouseLeave={el=>el.currentTarget.style.opacity="0.4"}>✕</button>
+                                    </div>
+                                </div>
+                            );
+                        })}
+                    </div>
+                </div>
+            )}
+
+            {/* ── Tab: Contributions ── */}
+            {viewTab==="contributions" && (
+                <div style={{ display:"grid", gap:14 }}>
+                    <div style={{ ...s.card, padding:"14px 18px" }}>
+                        <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:10 }}>
+                            <div style={{ fontSize:13, fontWeight:700, color:t.text }}>🔁 Virements récurrents</div>
+                            <button onClick={()=>setShowRecurForm(v=>!v)}
+                                    style={{ padding:"5px 11px", borderRadius:8, border:`1px solid rgba(16,185,129,0.35)`, background:"rgba(16,185,129,0.08)", color:COL, fontSize:11, cursor:"pointer", fontWeight:700 }}>
+                                {showRecurForm?"✕":"+ Configurer"}
+                            </button>
+                        </div>
+                        {showRecurForm && (
+                            <RecurringForm
+                                onSave={r=>{ onUpdateSettings({recurringContribs:[...(settings.recurringContribs||[]),{...r,id:uid()}]}); setShowRecurForm(false); }}
+                                onCancel={()=>setShowRecurForm(false)} s={s} t={t} COL={COL}
+                            />
+                        )}
+                        {recurringContribs.length===0&&!showRecurForm && <div style={{ fontSize:12, color:t.textTiny }}>Aucun virement récurrent — configure ici les virements mensuels de ta mère par exemple</div>}
+                        {recurringContribs.map(r=>(
+                            <div key={r.id} style={{ display:"flex", gap:8, alignItems:"center", padding:"8px 0", borderBottom:`1px solid ${t.divider}` }}>
+                                <span style={{ fontSize:14 }}>{r.from==="maman"?"💗":"💙"}</span>
+                                <div style={{ flex:1 }}>
+                                    <span style={{ fontSize:12, fontWeight:600, color:r.from==="maman"?"#f472b6":"#60a5fa" }}>{r.from==="maman"?"Maman":"Papa"}</span>
+                                    <span style={{ fontSize:11, color:t.textSub }}> — {r.amount} {r.inputCurrency}/mois depuis {r.startDate?.slice(0,7)}</span>
+                                    {r.note && <span style={{ fontSize:11, color:t.textDim }}> · {r.note}</span>}
+                                </div>
+                                <span style={{ fontSize:12, fontWeight:700, color:COL }}>+{fmt(toD(r.amount,r.inputCurrency))}/mois</span>
+                                <button onClick={()=>onUpdateSettings({recurringContribs:(settings.recurringContribs||[]).filter(x=>x.id!==r.id)})}
+                                        style={{ background:"none", border:"none", color:t.delColor, cursor:"pointer", fontSize:12, opacity:0.4, padding:"2px 4px" }}
+                                        onMouseEnter={e=>e.currentTarget.style.opacity="1"} onMouseLeave={e=>e.currentTarget.style.opacity="0.4"}>✕</button>
+                            </div>
+                        ))}
+                    </div>
+                    <div>
+                        <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:8 }}>
+                            <div style={{ fontSize:13, fontWeight:700, color:t.text }}>💸 Contributions ponctuelles</div>
+                            <button onClick={()=>setShowContrib(v=>!v)}
+                                    style={{ padding:"5px 11px", borderRadius:8, border:`1px solid rgba(16,185,129,0.35)`, background:"rgba(16,185,129,0.08)", color:COL, fontSize:11, cursor:"pointer", fontWeight:700 }}>
+                                {showContrib?"✕":"+ Ajouter"}
+                            </button>
+                        </div>
+                        {showContrib && <ContribForm onSave={c=>{onAddContribution(c);setShowContrib(false);}} onCancel={()=>setShowContrib(false)} s={s} t={t} COL={COL} />}
+                        <div style={{ display:"grid", gap:6 }}>
+                            {contributions.length===0&&!showContrib&&<div style={{ fontSize:12, color:t.textTiny, textAlign:"center", padding:"16px 0" }}>Aucune contribution ponctuelle</div>}
+                            {[...contributions].sort((a,b)=>b.date.localeCompare(a.date)).map(c=>(
+                                <div key={c.id} style={{ ...s.card, padding:"10px 13px", display:"flex", gap:8, alignItems:"center" }}>
+                                    <span style={{ fontSize:16, flexShrink:0 }}>{c.from==="maman"?"💗":c.from==="moi"?"🙋":"💙"}</span>
+                                    <div style={{ flex:1, minWidth:0 }}>
+                                        <div style={{ fontSize:12, fontWeight:700, color:c.from==="maman"?"#f472b6":c.from==="moi"?"#a78bfa":"#60a5fa" }}>
+                                            {c.from==="maman"?"Maman":c.from==="moi"?"Moi":c.from==="papa"?"Papa":c.from}
+                                            <span style={{ fontSize:10, color:t.textSub, fontWeight:400, marginLeft:5 }}>{c.type==="virement"?"virement":c.type==="revenu"?"revenu":"somme"} · {c.date}</span>
+                                        </div>
+                                        {c.note && <div style={{ fontSize:11, color:t.textDim, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{c.note}</div>}
+                                    </div>
+                                    <div style={{ fontSize:13, fontWeight:800, color:COL, flexShrink:0 }}>+{fmt(toD(c.amount,c.inputCurrency))}</div>
+                                    <button onClick={()=>onDeleteContribution(c.id)}
+                                            style={{ background:"none", border:"none", color:t.delColor, cursor:"pointer", fontSize:12, opacity:0.4, padding:"1px 3px", flexShrink:0 }}
+                                            onMouseEnter={e=>e.currentTarget.style.opacity="1"} onMouseLeave={e=>e.currentTarget.style.opacity="0.4"}>✕</button>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* ── Tab: Budget prévisionnel ── */}
+            {viewTab==="previsionnel" && (
+                <div style={{ display:"grid", gap:12 }}>
+
+                    {/* Total mensuel */}
+                    {totalMonthlyBudget > 0 && (
+                        <div style={{ ...s.card, padding:"14px 18px", borderLeft:`3px solid ${COL}` }}>
+                            <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:6 }}>
+                                <div style={{ fontSize:12, fontWeight:700, color:t.text }}>
+                                    {typeof _LANG!=="undefined"&&_LANG==="en" ? "💶 Total monthly budget" : "💶 Budget mensuel total"}
+                                </div>
+                                <div style={{ fontSize:20, fontWeight:900, color:COL }}>{fmt(totalMonthlyBudget)}</div>
+                            </div>
+                            <div style={{ display:"flex", gap:14, flexWrap:"wrap" }}>
+                                {totalMonthlyCats > 0 && <span style={{ fontSize:11, color:t.textSub }}>{typeof _LANG!=="undefined"&&_LANG==="en"?"Monthly cat.":"Catégories/mois"} : <strong style={{color:t.text}}>{fmt(totalMonthlyCats)}</strong></span>}
+                                {totalMonthlyFixed > 0 && <span style={{ fontSize:11, color:t.textSub }}>{typeof _LANG!=="undefined"&&_LANG==="en"?"Fixed (amort.)":"Fixe amorti/mois"} : <strong style={{color:t.text}}>{fmt(totalMonthlyFixed)}</strong></span>}
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Budgets mensuels par catégorie */}
+                    <div style={{ fontSize:12, fontWeight:700, color:t.text }}>{bt("monthly_budget")}</div>
+                    {BUDGET_CATS_DATA.map(cat => {
+                        const budget = toD(categoryBudgets[cat.id]||0,"CHF");
+                        const spent  = expenses.filter(e=>e.category===cat.id&&e.date.startsWith(curMonth)).reduce((s,e)=>s+toD(e.amount,e.inputCurrency),0);
+                        const pct    = budget>0 ? Math.min(100,spent/budget*100) : 0;
+                        const over   = budget>0 && spent>budget;
+                        const barCol = over?"#f87171":pct>75?"#f97316":COL;
+                        return (
+                            <div key={cat.id} style={{ ...s.card, padding:"12px 15px" }}>
+                                <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:budget>0?7:0 }}>
+                                    <span style={{ fontSize:16 }}>{cat.icon}</span>
+                                    <div style={{ flex:1, fontSize:12, fontWeight:700, color:t.text }}>{catLabel(cat)}</div>
+                                    <div style={{ display:"flex", alignItems:"center", gap:5 }}>
+                                        <input type="number" min="0" step="10"
+                                               value={categoryBudgets[cat.id]||""}
+                                               onChange={e=>onUpdateSettings({categoryBudgets:{...categoryBudgets,[cat.id]:Number(e.target.value)||0}})}
+                                               placeholder="0"
+                                               style={{ ...s.input, width:85, fontSize:12, padding:"3px 7px" }} />
+                                        <span style={{ fontSize:10, color:t.textSub }}>CHF/mois</span>
+                                    </div>
+                                </div>
+                                {budget>0 ? (
+                                    <>
+                                        <div style={{ background:t.cardBdr, borderRadius:20, height:7, overflow:"hidden", marginBottom:4 }}>
+                                            <div style={{ width:`${pct}%`, height:"100%", borderRadius:20, background:barCol, transition:"width 0.4s ease" }} />
+                                        </div>
+                                        <div style={{ display:"flex", justifyContent:"space-between", fontSize:11 }}>
+                                            <span style={{ color:t.textSub }}>{fmt(spent)} {bt("spent_lbl")}</span>
+                                            <span style={{ color:barCol, fontWeight:700 }}>{over?`+${fmt(spent-budget)} ${bt("over_lbl")}`:`${fmt(budget-spent)} ${bt("left_lbl")}`}</span>
+                                        </div>
+                                    </>
+                                ) : (
+                                    <div style={{ fontSize:10, color:t.textTiny, marginTop:2 }}>{bt("no_budget")}</div>
+                                )}
+                            </div>
+                        );
+                    })}
+
+                    {/* Dépenses fixes amorties */}
+                    <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginTop:4 }}>
+                        <div>
+                            <div style={{ fontSize:12, fontWeight:700, color:t.text }}>{bt("annual_budget")}</div>
+                            <div style={{ fontSize:10, color:t.textSub, marginTop:1 }}>
+                                {typeof _LANG!=="undefined"&&_LANG==="en"
+                                    ? "Annual costs ÷ months = monthly share (TL pass, school fees…)"
+                                    : "Coût annuel ÷ mois = part mensuelle (abonnement TL, frais scolarité…)"}
+                            </div>
+                        </div>
+                        <button onClick={()=>setShowAnnualForm(v=>!v)}
+                                style={{ padding:"5px 11px", borderRadius:8, border:`1px solid rgba(16,185,129,0.35)`, background:"rgba(16,185,129,0.08)", color:COL, fontSize:11, cursor:"pointer", fontWeight:700, flexShrink:0, marginLeft:10 }}>
+                            {showAnnualForm ? "✕" : bt("add_annual")}
+                        </button>
+                    </div>
+                    {showAnnualForm && (
+                        <FixedExpenseForm bt={bt} catLabel={catLabel}
+                            onSave={f=>{ onUpdateSettings({fixedExpenses:[...fixedExpenses,{...f,id:uid()}]}); setShowAnnualForm(false); }}
+                            onCancel={()=>setShowAnnualForm(false)} s={s} t={t} COL={COL} />
+                    )}
+                    {fixedExpenses.length===0&&!showAnnualForm && (
+                        <div style={{ fontSize:11, color:t.textTiny, textAlign:"center", padding:"10px 0" }}>
+                            {typeof _LANG!=="undefined"&&_LANG==="en"
+                                ? "No fixed expenses — add your TL pass, school fees, etc."
+                                : "Aucune dépense fixe — ajoute ton abonnement TL, tes frais de scolarité, etc."}
+                        </div>
+                    )}
+                    {fixedExpenses.map(f => {
+                        const cat      = BUDGET_CATS_DATA.find(c=>c.id===f.category);
+                        const totalD   = toD(f.amount, f.currency||"CHF");
+                        const perMonth = totalD / (f.amortizeMonths||12);
+                        const lang = typeof _LANG!=="undefined"&&_LANG==="en"?"en":"fr";
+                        const AL = { en:{"12":"÷12 months","9":"÷9 months (acad. yr)","6":"÷6 months","5":"÷5 months (sem.)","1":"fixed/month"},
+                                     fr:{"12":"÷12 mois","9":"÷9 mois (an. acad.)","6":"÷6 mois","5":"÷5 mois (sem.)","1":"fixe/mois"} };
+                        const amortLabel = AL[lang][String(f.amortizeMonths||12)]||`÷${f.amortizeMonths} mois`;
+                        return (
+                            <div key={f.id} style={{ ...s.card, padding:"12px 15px", display:"flex", gap:10, alignItems:"center" }}>
+                                <span style={{ fontSize:16, flexShrink:0 }}>{cat?.icon||"📌"}</span>
+                                <div style={{ flex:1, minWidth:0 }}>
+                                    <div style={{ fontSize:12, fontWeight:700, color:t.text }}>{f.name}</div>
+                                    <div style={{ fontSize:10, color:t.textSub, marginTop:2 }}>
+                                        {fmt(totalD)} {amortLabel}{cat ? ` · ${catLabel(cat)}` : ""}
+                                    </div>
+                                </div>
+                                <div style={{ textAlign:"right", flexShrink:0 }}>
+                                    <div style={{ fontSize:15, fontWeight:800, color:COL }}>{fmt(perMonth)}</div>
+                                    <div style={{ fontSize:9, color:t.textTiny }}>/mois</div>
+                                </div>
+                                <button onClick={()=>onUpdateSettings({fixedExpenses:fixedExpenses.filter(x=>x.id!==f.id)})}
+                                        style={{ background:"none", border:"none", color:t.delColor, cursor:"pointer", fontSize:12, opacity:0.4, padding:"1px 3px", flexShrink:0 }}
+                                        onMouseEnter={e=>e.currentTarget.style.opacity="1"} onMouseLeave={e=>e.currentTarget.style.opacity="0.4"}>✕</button>
+                            </div>
+                        );
+                    })}
+                </div>
+            )}
+        </div>
+    );
+}
+
+function ReimbForm({ netToMaman, netToPapa, netFromMaman, netFromPapa, DCUR, bt, onSave, onCancel, s, t, COL, fmt }) {
+    const opts = [];
+    if (netToMaman  > 0.5) opts.push({ value:"maman", label:`💗 Maman (${fmt(netToMaman)})` });
+    if (netToPapa   > 0.5) opts.push({ value:"papa",  label:`💙 Papa (${fmt(netToPapa)})` });
+    if (netFromMaman> 0.5) opts.push({ value:"moi-maman", label:`🙋 Moi ← Maman (${fmt(netFromMaman)})` });
+    if (netFromPapa > 0.5) opts.push({ value:"moi-papa",  label:`🙋 Moi ← Papa (${fmt(netFromPapa)})` });
+    const [form, setForm] = useState({ to: opts[0]?.value||"maman", amount:"", note:"" });
+    const up = (k,v) => setForm(f=>({...f,[k]:v}));
+    const handleSave = () => {
+        const amt = parseFloat(form.amount);
+        if (!amt || amt <= 0) return;
+        const to = form.to.startsWith("moi") ? "moi" : form.to;
+        onSave({ to, amount:amt, note:form.note });
+    };
+    return (
+        <div style={{ display:"grid", gap:8 }}>
+            <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8 }}>
+                <div>
+                    <div style={{ fontSize:10, color:t.textSub, marginBottom:3 }}>{bt("reimb_to")}</div>
+                    <select value={form.to} onChange={e=>up("to",e.target.value)} style={{ ...s.sel, width:"100%", fontSize:11 }}>
+                        {opts.map(o=><option key={o.value} value={o.value}>{o.label}</option>)}
+                    </select>
+                </div>
+                <div>
+                    <div style={{ fontSize:10, color:t.textSub, marginBottom:3 }}>{bt("amount")} ({DCUR})</div>
+                    <input type="number" min="0" step="0.01" value={form.amount} onChange={e=>up("amount",e.target.value)}
+                           placeholder="0.00" style={{ ...s.input, width:"100%", fontSize:12, padding:"5px 8px" }} />
+                </div>
+            </div>
+            <input type="text" value={form.note} onChange={e=>up("note",e.target.value)}
+                   placeholder={bt("reimb_note")} style={{ ...s.input, fontSize:12, padding:"5px 8px" }} />
+            <div style={{ display:"flex", gap:8, justifyContent:"flex-end" }}>
+                <button onClick={onCancel} style={{ padding:"5px 12px", borderRadius:8, border:`1px solid ${t.cardBdr}`, background:"none", color:t.textSub, fontSize:11, cursor:"pointer" }}>{bt("cancel")}</button>
+                <button onClick={handleSave} style={{ padding:"5px 14px", borderRadius:8, border:"none", background:COL, color:"#0f1117", fontSize:11, cursor:"pointer", fontWeight:700 }}>{bt("save")}</button>
+            </div>
+        </div>
+    );
+}
+
+function FixedExpenseForm({ bt, catLabel, onSave, onCancel, s, t, COL }) {
+    const isEn = typeof _LANG!=="undefined"&&_LANG==="en";
+    const PERIODS = isEn
+        ? [["12","Annual (÷12 months)"],["9","Academic year EPFL (÷9 months)"],["5","Semester (÷5 months)"],["6","Half-year (÷6 months)"],["1","Already monthly"]]
+        : [["12","Annuelle (÷12 mois)"],["9","Année académique EPFL (÷9 mois)"],["5","Semestre (÷5 mois)"],["6","Semestriel (÷6 mois)"],["1","Déjà mensuel"]];
+    const [form, setForm] = useState({ name:"", category:"", amount:"", currency:"CHF", amortizeMonths:12 });
+    const up = (k,v) => setForm(f=>({...f,[k]:v}));
+    const handleSave = () => {
+        const amt = parseFloat(form.amount);
+        if (!form.name.trim() || !amt || amt<=0) return;
+        onSave({ ...form, amount:amt, amortizeMonths:Number(form.amortizeMonths) });
+    };
+    const preview = form.amount && Number(form.amount)>0 ? Number(form.amount)/Number(form.amortizeMonths) : null;
+    return (
+        <div style={{ ...s.card, padding:"13px 16px", display:"grid", gap:9, border:`1px solid rgba(16,185,129,0.2)` }}>
+            <div>
+                <div style={{ fontSize:10, color:t.textSub, marginBottom:3 }}>{isEn?"Expense name *":"Nom de la dépense *"}</div>
+                <input autoFocus value={form.name} onChange={e=>up("name",e.target.value)}
+                       placeholder={isEn?"TL annual pass, School fees…":"Abonnement TL, Frais de scolarité…"}
+                       style={{ ...s.input, width:"100%" }} />
+            </div>
+            <div style={{ display:"grid", gridTemplateColumns:"1fr 80px", gap:8 }}>
+                <div>
+                    <div style={{ fontSize:10, color:t.textSub, marginBottom:3 }}>{isEn?"Total amount *":"Montant total *"}</div>
+                    <input type="number" min="0" step="10" value={form.amount} onChange={e=>up("amount",e.target.value)}
+                           placeholder="0" style={{ ...s.input, width:"100%" }} />
+                </div>
+                <div>
+                    <div style={{ fontSize:10, color:t.textSub, marginBottom:3 }}>{bt("currency")}</div>
+                    <select value={form.currency} onChange={e=>up("currency",e.target.value)} style={{ ...s.sel, width:"100%" }}>
+                        <option>CHF</option><option>EUR</option>
+                    </select>
+                </div>
+            </div>
+            <div>
+                <div style={{ fontSize:10, color:t.textSub, marginBottom:3 }}>{isEn?"Spread over":"Étaler sur"}</div>
+                <select value={form.amortizeMonths} onChange={e=>up("amortizeMonths",e.target.value)} style={{ ...s.sel, width:"100%" }}>
+                    {PERIODS.map(([v,l])=><option key={v} value={v}>{l}</option>)}
+                </select>
+            </div>
+            <div>
+                <div style={{ fontSize:10, color:t.textSub, marginBottom:3 }}>{bt("annual_cat")}</div>
+                <select value={form.category} onChange={e=>up("category",e.target.value)} style={{ ...s.sel, width:"100%" }}>
+                    <option value="">{isEn?"No category":"Sans catégorie"}</option>
+                    {BUDGET_CATS_DATA.map(c=><option key={c.id} value={c.id}>{c.icon} {catLabel(c)}</option>)}
+                </select>
+            </div>
+            {preview !== null && (
+                <div style={{ padding:"8px 12px", borderRadius:8, background:"rgba(16,185,129,0.08)", fontSize:12, color:"#10b981", fontWeight:700 }}>
+                    {isEn?"→ Monthly share:":"→ Part mensuelle :"} {preview.toLocaleString("fr-FR",{minimumFractionDigits:2,maximumFractionDigits:2})} {form.currency}/mois
+                </div>
+            )}
+            <div style={{ display:"flex", gap:8, justifyContent:"flex-end" }}>
+                <button onClick={onCancel} style={{ padding:"5px 12px", borderRadius:8, border:`1px solid ${t.cardBdr}`, background:"none", color:t.textSub, fontSize:11, cursor:"pointer" }}>{bt("cancel")}</button>
+                <button onClick={handleSave} style={{ padding:"5px 14px", borderRadius:8, border:"none", background:COL, color:"#0f1117", fontSize:11, cursor:"pointer", fontWeight:700 }}>{bt("save")}</button>
+            </div>
+        </div>
+    );
+}
+
+function RecurringForm({ onSave, onCancel, s, t, COL }) {
+    const [form, setForm] = useState({ from:"maman", amount:"", inputCurrency:"CHF", startDate:getTodayKey().slice(0,7)+"-01", note:"" });
+    const up = (k, v) => setForm(f => ({ ...f, [k]:v }));
+    const handleSave = () => {
+        const amt = parseFloat(form.amount);
+        if (!amt || amt <= 0) return;
+        onSave({ ...form, amount:amt });
+    };
+    return (
+        <div style={{ display:"grid", gap:8, padding:"12px 0", borderTop:`1px solid ${t.divider}`, marginTop:8 }}>
+            <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8 }}>
+                <div>
+                    <label style={{ fontSize:11, color:t.textSub, display:"block", marginBottom:3 }}>De</label>
+                    <select value={form.from} onChange={e=>up("from",e.target.value)} style={{ ...s.sel, width:"100%", fontSize:12, padding:"5px 8px" }}>
+                        <option value="maman">💗 Maman</option>
+                        <option value="papa">💙 Papa</option>
+                    </select>
+                </div>
+                <div>
+                    <label style={{ fontSize:11, color:t.textSub, display:"block", marginBottom:3 }}>Depuis (mois)</label>
+                    <input type="month" value={form.startDate?.slice(0,7)} onChange={e=>up("startDate",e.target.value+"-01")}
+                           style={{ ...s.input, width:"100%", fontSize:12, padding:"5px 8px", boxSizing:"border-box" }} />
+                </div>
+            </div>
+            <div style={{ display:"grid", gridTemplateColumns:"1fr auto", gap:8 }}>
+                <input type="number" min="0" step="0.01" value={form.amount} onChange={e=>up("amount",e.target.value)}
+                       placeholder="Montant mensuel" style={{ ...s.input, fontSize:12, padding:"5px 8px" }} />
+                <select value={form.inputCurrency} onChange={e=>up("inputCurrency",e.target.value)} style={{ ...s.sel, fontSize:12, padding:"5px 8px" }}>
+                    <option>CHF</option><option>EUR</option>
+                </select>
+            </div>
+            <input type="text" value={form.note} onChange={e=>up("note",e.target.value)}
+                   placeholder="Note (optionnelle)" style={{ ...s.input, fontSize:12, padding:"5px 8px" }} />
+            <div style={{ display:"flex", gap:8, justifyContent:"flex-end" }}>
+                <button onClick={onCancel} style={{ padding:"5px 12px", borderRadius:8, border:`1px solid ${t.cardBdr}`, background:"none", color:t.textSub, fontSize:11, cursor:"pointer" }}>Annuler</button>
+                <button onClick={handleSave} style={{ padding:"5px 14px", borderRadius:8, border:"none", background:COL, color:"#0f1117", fontSize:11, cursor:"pointer", fontWeight:700 }}>Enregistrer</button>
+            </div>
+        </div>
+    );
+}
+
+function ContribForm({ onSave, onCancel, s, t, COL }) {
+    const [form, setForm] = useState({ from:"papa", type:"somme", amount:"", inputCurrency:"CHF", date:getTodayKey(), note:"" });
+    const up = (k, v) => setForm(f => ({ ...f, [k]:v }));
+    const handleSave = () => {
+        const amt = parseFloat(form.amount);
+        if (!amt || amt <= 0) return;
+        onSave({ id:uid(), ...form, amount:amt });
+    };
+    return (
+        <div style={{ ...s.card, padding:"14px", display:"grid", gap:10, border:`1px solid rgba(16,185,129,0.2)` }}>
+            <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8 }}>
+                <div>
+                    <div style={{ fontSize:10, color:t.textSub, marginBottom:3 }}>De</div>
+                    <select value={form.from} onChange={e=>up("from",e.target.value)} style={{ ...s.sel, width:"100%" }}>
+                        <option value="papa">💙 Papa</option>
+                        <option value="maman">💗 Maman</option>
+                        <option value="moi">🙋 Moi (revenu)</option>
+                    </select>
+                </div>
+                <div>
+                    <div style={{ fontSize:10, color:t.textSub, marginBottom:3 }}>Type</div>
+                    <select value={form.type} onChange={e=>up("type",e.target.value)} style={{ ...s.sel, width:"100%" }}>
+                        <option value="somme">Somme globale</option>
+                        <option value="virement">Virement mensuel</option>
+                        {form.from==="moi" && <option value="revenu">Revenu / salaire</option>}
+                    </select>
+                </div>
+            </div>
+            <div style={{ display:"grid", gridTemplateColumns:"1fr 80px 1fr", gap:8 }}>
+                <div>
+                    <div style={{ fontSize:10, color:t.textSub, marginBottom:3 }}>Montant *</div>
+                    <input autoFocus type="number" min="0" step="0.01" value={form.amount} onChange={e=>up("amount",e.target.value)}
+                           onKeyDown={e=>{ if(e.key==="Enter") handleSave(); if(e.key==="Escape") onCancel(); }}
+                           placeholder="0,00" style={{ ...s.input, width:"100%" }} />
+                </div>
+                <div>
+                    <div style={{ fontSize:10, color:t.textSub, marginBottom:3 }}>Devise</div>
+                    <select value={form.inputCurrency} onChange={e=>up("inputCurrency",e.target.value)} style={{ ...s.sel, width:"100%" }}>
+                        <option value="CHF">CHF</option>
+                        <option value="EUR">EUR</option>
+                    </select>
+                </div>
+                <div>
+                    <div style={{ fontSize:10, color:t.textSub, marginBottom:3 }}>Date</div>
+                    <input type="date" value={form.date} onChange={e=>up("date",e.target.value)} style={{ ...s.input, width:"100%" }} />
+                </div>
+            </div>
+            <div>
+                <div style={{ fontSize:10, color:t.textSub, marginBottom:3 }}>Note (optionnel)</div>
+                <input value={form.note} onChange={e=>up("note",e.target.value)}
+                       onKeyDown={e=>{ if(e.key==="Enter") handleSave(); if(e.key==="Escape") onCancel(); }}
+                       placeholder="Budget logement, semestre automne…" style={{ ...s.input, width:"100%" }} />
+            </div>
+            <div style={{ display:"flex", gap:8, justifyContent:"flex-end" }}>
+                <button onClick={onCancel} style={{ padding:"7px 14px", borderRadius:8, border:`1px solid ${t.inpBdr}`, background:"transparent", color:t.textSub, fontSize:12, cursor:"pointer" }}>Annuler</button>
+                <button onClick={handleSave} style={{ padding:"7px 18px", borderRadius:8, border:`1px solid rgba(16,185,129,0.4)`, background:"rgba(16,185,129,0.12)", color:COL, fontSize:12, fontWeight:700, cursor:"pointer" }}>Enregistrer</button>
+            </div>
+        </div>
+    );
+}
+
+function ExpenseForm({ initialData, onSave, onCancel, s, t, COL }) {
+    const catLabel = c => c ? (typeof _LANG!=="undefined"&&_LANG==="en" ? c.en : c.fr) : "";
+    const empty = { description:"", date:getTodayKey(), amount:"", inputCurrency:"CHF", category:"bouffe", paidBy:"maman", isShared:false, splitMaman:50, excludeFromBalance:false, note:"" };
+    const [form, setForm] = useState(initialData ? { ...initialData, amount:String(initialData.amount) } : empty);
+    const up = (k, v) => setForm(f => ({ ...f, [k]:v }));
+    const handleSave = () => {
+        const amt = parseFloat(form.amount);
+        if (!form.description.trim() || !amt || amt <= 0) return;
+        onSave({ ...form, amount:amt, splitMaman:form.isShared ? Number(form.splitMaman) : 50 });
+    };
+    return (
+        <div style={{ ...s.card, padding:"16px", display:"grid", gap:12, border:`1px solid rgba(16,185,129,0.2)` }}>
+            <div>
+                <div style={{ fontSize:10, color:t.textSub, marginBottom:3 }}>Description *</div>
+                <input autoFocus value={form.description} onChange={e=>up("description",e.target.value)}
+                       onKeyDown={e=>{ if(e.key==="Enter") handleSave(); if(e.key==="Escape") onCancel(); }}
+                       placeholder="Loyer, inscription, courses…" style={{ ...s.input, width:"100%" }} />
+            </div>
+            <div style={{ display:"grid", gridTemplateColumns:"1fr 80px 1fr 1fr", gap:8 }}>
+                <div>
+                    <div style={{ fontSize:10, color:t.textSub, marginBottom:3 }}>Montant *</div>
+                    <input type="number" min="0" step="0.01" value={form.amount} onChange={e=>up("amount",e.target.value)}
+                           placeholder="0,00" style={{ ...s.input, width:"100%" }} />
+                </div>
+                <div>
+                    <div style={{ fontSize:10, color:t.textSub, marginBottom:3 }}>Devise</div>
+                    <select value={form.inputCurrency} onChange={e=>up("inputCurrency",e.target.value)} style={{ ...s.sel, width:"100%" }}>
+                        <option value="CHF">CHF</option>
+                        <option value="EUR">EUR</option>
+                    </select>
+                </div>
+                <div>
+                    <div style={{ fontSize:10, color:t.textSub, marginBottom:3 }}>Date</div>
+                    <input type="date" value={form.date} onChange={e=>up("date",e.target.value)} style={{ ...s.input, width:"100%" }} />
+                </div>
+                <div>
+                    <div style={{ fontSize:10, color:t.textSub, marginBottom:3 }}>Payé par</div>
+                    <select value={form.paidBy} onChange={e=>up("paidBy",e.target.value)} style={{ ...s.sel, width:"100%" }}>
+                        <option value="maman">💗 Maman</option>
+                        <option value="papa">💙 Papa</option>
+                        <option value="moi">🙋 Moi</option>
+                    </select>
+                </div>
+            </div>
+            <div>
+                <div style={{ fontSize:10, color:t.textSub, marginBottom:6 }}>Catégorie</div>
+                <div style={{ display:"flex", gap:6, flexWrap:"wrap" }}>
+                    {BUDGET_CATS.map(c => (
+                        <button key={c.id} onClick={()=>up("category",c.id)}
+                                style={{ padding:"5px 12px", borderRadius:20, border:`1px solid ${form.category===c.id?"rgba(16,185,129,0.5)":t.filterBdr}`, background:form.category===c.id?"rgba(16,185,129,0.12)":"transparent", color:form.category===c.id?COL:t.textSub, fontSize:11, cursor:"pointer", fontWeight:form.category===c.id?700:400 }}>
+                            {c.icon} {catLabel(c)}
+                        </button>
+                    ))}
+                </div>
+            </div>
+            <div style={{ display:"flex", alignItems:"center", gap:14, flexWrap:"wrap" }}>
+                <label style={{ display:"flex", alignItems:"center", gap:6, cursor:"pointer", fontSize:12, color:t.textSub, userSelect:"none" }}>
+                    <input type="checkbox" checked={form.isShared} onChange={e=>up("isShared",e.target.checked)}
+                           style={{ accentColor:COL, width:14, height:14 }} />
+                    Dépense partagée (les deux auraient dû payer)
+                </label>
+                {form.isShared && (
+                    <>
+                        <div style={{ display:"flex", alignItems:"center", gap:6, fontSize:12, color:t.textSub }}>
+                            <span>Part Maman</span>
+                            <input type="number" min="0" max="100" value={form.splitMaman}
+                                   onChange={e=>up("splitMaman",Math.max(0,Math.min(100,Number(e.target.value))))}
+                                   style={{ ...s.input, width:55, padding:"3px 7px", fontSize:12 }} />
+                            <span>% — Papa {100-(Number(form.splitMaman)||0)}%</span>
+                        </div>
+                        <label style={{ display:"flex", alignItems:"center", gap:6, cursor:"pointer", fontSize:12, color:t.textSub, userSelect:"none" }}>
+                            <input type="checkbox" checked={form.excludeFromBalance} onChange={e=>up("excludeFromBalance",e.target.checked)}
+                                   style={{ accentColor:"#f97316", width:14, height:14 }} />
+                            Exclure de la balance
+                        </label>
+                    </>
+                )}
+            </div>
+            <div style={{ display:"flex", gap:8, justifyContent:"flex-end" }}>
+                <button onClick={onCancel} style={{ padding:"7px 14px", borderRadius:8, border:`1px solid ${t.inpBdr}`, background:"transparent", color:t.textSub, fontSize:12, cursor:"pointer" }}>Annuler</button>
+                <button onClick={handleSave} style={{ padding:"7px 20px", borderRadius:8, border:`1px solid rgba(16,185,129,0.4)`, background:"rgba(16,185,129,0.12)", color:COL, fontSize:12, fontWeight:700, cursor:"pointer" }}>
+                    {initialData ? "Modifier" : "Ajouter la dépense"}
+                </button>
             </div>
         </div>
     );
