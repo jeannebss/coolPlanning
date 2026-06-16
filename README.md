@@ -11,7 +11,7 @@ An all-in-one personal planning app, built with React + Vite.
 - Configurable daily score system (×1, ×2, ×3)
 - Bonus tasks ⭐ (don't count toward the main score)
 - Hourly scheduling with timeline view
-- Link tasks to weekly goals, projects and courses
+- Link tasks to projects and courses
 - Subtasks, notes and recurring tasks
 - Daily journal + mood tracker
 - Auto-carry of unfinished tasks to the next day
@@ -23,7 +23,6 @@ An all-in-one personal planning app, built with React + Vite.
 
 ### 📅 Month
 - Up to 3 monthly priorities
-- Weekly progress tracking
 
 ### 📌 To-Do (Backlog)
 - Ideas to schedule for later
@@ -42,6 +41,15 @@ An all-in-one personal planning app, built with React + Vite.
 ### 📁 Projects & 🍽️ Recipes
 - Projects with deadlines, task linking and archiving
 - Recipe library with meal planning
+
+### 🎬 Movies & Series
+- Watchlist with movies/series, reorder by drag & drop
+- Check off when seen — moves to a collapsible "Seen" history
+
+### 💰 Budget
+- One-off expenses by category, recurring & fixed contributions
+- Family member contributions, shared-expense reimbursements
+- Currency conversion and budget alerts
 
 ### ⏱ Pomodoro
 - 25/5 min timer with automatic focus time logging
@@ -107,7 +115,7 @@ coolplanning/
 
 ## 🛠 Stack
 
-- **React 18** + **Vite**
+- **React 19** + **Vite**
 - Vanilla CSS-in-JS (zero UI dependencies)
 - Web Audio API for sounds
 - Native browser notifications
