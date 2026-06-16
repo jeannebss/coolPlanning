@@ -1,4 +1,4 @@
-﻿import { useState, useEffect, useRef } from "react";
+﻿import { useState, useEffect, useRef, useMemo } from "react";
 
 // ── i18n ─────────────────────────────────────────────────────────────────────
 
@@ -39,6 +39,7 @@ const I18N = {
         no_movies:"Nothing on your watchlist yet",
         to_watch_lbl:"To watch", seen_section:"✓ Seen", no_seen:"No seen items yet",
         mark_seen_tip:"Mark as seen", mark_unseen_tip:"Move back to watchlist",
+        movie_note_tip:"Note / comment", movie_rating_tip:"Your rating", movie_type:"Movie/Series",
         // Day view
         day_tasks_title:"Daily tasks",
         planned_tasks:"Planned tasks", done_lbl:"Done", remaining:"Remaining",
@@ -241,6 +242,17 @@ const I18N = {
         pdf_reviews_title:"📋 Weekly reviews",
         pdf_accomplished:"🏆 Accomplished", pdf_worked:"✅ What worked",
         pdf_differently:"🔄 Do differently", pdf_next_prio:"🎯 Next priority",
+        pdf_export_of:"Export of", pdf_week_of:"Week of",
+        // Misc UI
+        popup_blocked:"Allow pop-ups to export as PDF", invalid_file:"Invalid file",
+        ck_start:"Start", ck_mark_done:"Mark as done", ck_reset:"Finish → Reset",
+        coef_set:"Set the coefficient", coef_change:"Coefficient ×{n} — click to change",
+        bonus_off_tip:"Mark as bonus", bonus_on_tip:"Bonus ⭐ — doesn't count in the score",
+        recurring_on_tip:"Recurring ✓", recurring_off_tip:"Recurring (disabled)",
+        note_tip:"Note", in_progress_lbl:"in progress",
+        pending_since:"Pending for {n} day{s}",
+        all_cats_lbl:"All", plan_btn:"Plan", emoji_paste_ph:"Paste an emoji…",
+        tip_close:"Close", focus_short:"FOCUS", break_short:"BREAK",
         // Lang toggle
         lang_toggle:"🇫🇷 FR",
         // Suggestions panel
@@ -295,6 +307,7 @@ const I18N = {
         no_movies:"Aucun film ou série dans la liste",
         to_watch_lbl:"À voir", seen_section:"✓ Vus", no_seen:"Aucun film/série vu pour le moment",
         mark_seen_tip:"Marquer comme vu", mark_unseen_tip:"Remettre dans la liste",
+        movie_note_tip:"Note / commentaire", movie_rating_tip:"Votre note", movie_type:"Film/Série",
         day_tasks_title:"Tâches du jour",
         planned_tasks:"Tâches planifiées", done_lbl:"Accomplies", remaining:"Restantes",
         light_day:"journée légère", normal_day:"journée normale",
@@ -475,6 +488,16 @@ const I18N = {
         pdf_reviews_title:"📋 Résumés de semaine",
         pdf_accomplished:"🏆 Accompli", pdf_worked:"✅ Ce qui a marché",
         pdf_differently:"🔄 À faire différemment", pdf_next_prio:"🎯 Priorité suivante",
+        pdf_export_of:"Export du", pdf_week_of:"Semaine du",
+        popup_blocked:"Autorise les pop-ups pour exporter en PDF", invalid_file:"Fichier invalide",
+        ck_start:"Démarrer", ck_mark_done:"Marquer comme terminé", ck_reset:"Terminer → Réinitialiser",
+        coef_set:"Définir le coefficient", coef_change:"Coefficient ×{n} — cliquer pour changer",
+        bonus_off_tip:"Marquer comme bonus", bonus_on_tip:"Bonus ⭐ — ne compte pas dans le score",
+        recurring_on_tip:"Récurrent ✓", recurring_off_tip:"Récurrent (désactivé)",
+        note_tip:"Note", in_progress_lbl:"en cours",
+        pending_since:"En attente depuis {n} jour{s}",
+        all_cats_lbl:"Tous", plan_btn:"Planifier", emoji_paste_ph:"Colle un emoji…",
+        tip_close:"Fermer", focus_short:"FOCUS", break_short:"PAUSE",
         lang_toggle:"🇬🇧 EN",
         sugg_title:"tâche de la veille non reportée", sugg_title_pl:"tâche(s) de la veille non reportée(s)",
         sugg_dismiss_all:"Tout ignorer", sugg_import_all:"Tout importer",
@@ -704,9 +727,19 @@ function getWeekLabel(key) {
     const fmt = d => d.toLocaleDateString(_loc, { day:"2-digit", month:"short" });
     return `${fmt(s)} – ${fmt(e)}`;
 }
-function load() { try { return JSON.parse(localStorage.getItem("goalsAppV2") || "{}"); } catch { return {}; } }
+const SCHEMA_VERSION = 1;
+// A valid app-data payload is a plain object (not an array/string/number/null) — anything
+// else means the persisted JSON was corrupted or came from an unrelated file.
+function isValidAppData(d) { return d !== null && typeof d === "object" && !Array.isArray(d); }
+
+function load() {
+    try {
+        const parsed = JSON.parse(localStorage.getItem("goalsAppV2") || "{}");
+        return isValidAppData(parsed) ? parsed : {};
+    } catch { return {}; }
+}
 function save(d) {
-    try { localStorage.setItem("goalsAppV2", JSON.stringify(d)); } catch {}
+    try { localStorage.setItem("goalsAppV2", JSON.stringify(d)); } catch { /* storage unavailable/full, ignore */ }
     if (navigator.sendBeacon) {
         const blob = new Blob([JSON.stringify(d)], { type: "application/json" });
         navigator.sendBeacon("/api/save", blob);
@@ -720,7 +753,8 @@ async function loadFromFile() {
         if (!res.ok) return null;
         const text = await res.text();
         if (!text || text === "{}") return null;
-        return JSON.parse(text);
+        const parsed = JSON.parse(text);
+        return isValidAppData(parsed) ? parsed : null;
     } catch { return null; }
 }
 function uid() { return Date.now().toString(36) + Math.random().toString(36).slice(2); }
@@ -753,7 +787,7 @@ function playDone(soundOn) {
             g.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + when + 0.3);
             o.start(ctx.currentTime + when); o.stop(ctx.currentTime + when + 0.3);
         });
-    } catch {}
+    } catch { /* audio unavailable, ignore */ }
 }
 function playTimerEnd(soundOn) {
     if (!soundOn) return;
@@ -767,7 +801,7 @@ function playTimerEnd(soundOn) {
             g.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + when + 0.55);
             o.start(ctx.currentTime + when); o.stop(ctx.currentTime + when + 0.6);
         });
-    } catch {}
+    } catch { /* audio unavailable, ignore */ }
 }
 function generatePDFHtml(data) {
     const today = new Date().toLocaleDateString(_LANG==="fr"?"fr-FR":"en-US",{weekday:"long",day:"numeric",month:"long",year:"numeric"});
@@ -776,13 +810,13 @@ function generatePDFHtml(data) {
     const journalEntries = Object.entries(data.journal||{}).filter(([,tx])=>tx.trim()).sort(([a],[b])=>b.localeCompare(a)).slice(0,30);
     const reviews = Object.entries(data.weekReviews||{}).filter(([,r])=>r.q1||r.q2||r.q3||r.q4).sort(([a],[b])=>b.localeCompare(a)).slice(0,10);
     const esc = s => String(s||"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
-    return `<!DOCTYPE html><html lang="fr"><head><meta charset="UTF-8"><title>CoolPlanning — Export</title>
+    return `<!DOCTYPE html><html lang="${_LANG==="fr"?"fr":"en"}"><head><meta charset="UTF-8"><title>CoolPlanning — Export</title>
 <style>body{font-family:Georgia,serif;max-width:800px;margin:40px auto;padding:0 20px;color:#1a1a2e;font-size:14px;line-height:1.7}h1{color:#6d28d9;font-size:28px;margin-bottom:4px}.sub{color:#666;margin-bottom:32px;font-size:13px}h2{color:#5b21b6;font-size:18px;margin-top:36px;border-bottom:2px solid #ede9fe;padding-bottom:8px}h3{color:#7c3aed;font-size:15px;margin:20px 0 8px}.stats{display:flex;gap:20px;flex-wrap:wrap;margin:16px 0}.stat{background:#f5f3ff;border-radius:10px;padding:12px 18px;text-align:center}.sv{font-size:28px;font-weight:800;color:#6d28d9}.sl{font-size:11px;color:#666}.entry{margin:16px 0;padding:14px 18px;background:#fafaf9;border-radius:8px;border-left:3px solid #8b5cf6}.ed{font-size:11px;color:#888;font-weight:600;text-transform:uppercase;margin-bottom:6px}.et{white-space:pre-wrap;color:#333}.review{margin:16px 0;padding:14px 18px;background:#fff7ed;border-radius:8px;border-left:3px solid #f97316}.ql{font-size:11px;font-weight:700;color:#f97316;margin-bottom:4px;margin-top:10px}.qt{color:#333;font-size:13px;white-space:pre-wrap}@media print{body{margin:20px}}</style>
 </head><body>
-<h1>🎯 CoolPlanning</h1><div class="sub">Export du ${esc(today)}</div>
+<h1>🎯 CoolPlanning</h1><div class="sub">${tr("pdf_export_of")} ${esc(today)}</div>
 <h2>${tr("pdf_stats")}</h2><div class="stats"><div class="stat"><div class="sv">${totalTasks}</div><div class="sl">${tr("pdf_total_tasks")}</div></div><div class="stat"><div class="sv">${doneTasks}</div><div class="sl">${tr("pdf_done_tasks")}</div></div><div class="stat"><div class="sv">${totalTasks>0?Math.round(doneTasks/totalTasks*100):0}%</div><div class="sl">${tr("pdf_rate")}</div></div><div class="stat"><div class="sv">${journalEntries.length}</div><div class="sl">${tr("pdf_journal_count")}</div></div></div>
 ${journalEntries.length?`<h2>📝 Journal</h2>${journalEntries.map(([dk,tx])=>`<div class="entry"><div class="ed">${new Date(dk+"T12:00:00").toLocaleDateString(_LANG==="fr"?"fr-FR":"en-US",{weekday:"long",day:"numeric",month:"long",year:"numeric"})}</div><div class="et">${esc(tx)}</div></div>`).join("")}`:""}
-${reviews.length?`<h2>${tr("pdf_reviews_title")}</h2>${reviews.map(([wk,r])=>`<div class="review"><h3>Semaine du ${new Date(wk+"T12:00:00").toLocaleDateString(_LANG==="fr"?"fr-FR":"en-US",{day:"2-digit",month:"long",year:"numeric"})}</h3>${r.q1?`<div class="ql">${tr("pdf_accomplished")}</div><div class="qt">${esc(r.q1)}</div>`:""}${r.q2?`<div class="ql">${tr("pdf_worked")}</div><div class="qt">${esc(r.q2)}</div>`:""}${r.q3?`<div class="ql">${tr("pdf_differently")}</div><div class="qt">${esc(r.q3)}</div>`:""}${r.q4?`<div class="ql">${tr("pdf_next_prio")}</div><div class="qt">${esc(r.q4)}</div>`:""}</div>`).join("")}`:""}
+${reviews.length?`<h2>${tr("pdf_reviews_title")}</h2>${reviews.map(([wk,r])=>`<div class="review"><h3>${tr("pdf_week_of")} ${new Date(wk+"T12:00:00").toLocaleDateString(_LANG==="fr"?"fr-FR":"en-US",{day:"2-digit",month:"long",year:"numeric"})}</h3>${r.q1?`<div class="ql">${tr("pdf_accomplished")}</div><div class="qt">${esc(r.q1)}</div>`:""}${r.q2?`<div class="ql">${tr("pdf_worked")}</div><div class="qt">${esc(r.q2)}</div>`:""}${r.q3?`<div class="ql">${tr("pdf_differently")}</div><div class="qt">${esc(r.q3)}</div>`:""}${r.q4?`<div class="ql">${tr("pdf_next_prio")}</div><div class="qt">${esc(r.q4)}</div>`:""}</div>`).join("")}`:""}
 </body></html>`;
 }
 
@@ -804,6 +838,25 @@ function mkS(t) {
     };
 }
 
+// ── Shared hooks/components ────────────────────────────────────────────────────
+
+// Drag-to-reorder boilerplate shared by GoalItem, HabitRow and MovieRow.
+function useDragReorder(idx, onReorder, dataKey = "text/plain") {
+    const [dragOver, setDragOver] = useState(false);
+    const dragProps = {
+        draggable: true,
+        onDragStart: e => e.dataTransfer.setData(dataKey, String(idx)),
+        onDragOver: e => { e.preventDefault(); setDragOver(true); },
+        onDragLeave: () => setDragOver(false),
+        onDrop: e => { e.preventDefault(); setDragOver(false); const from = +e.dataTransfer.getData(dataKey); if (from !== idx) onReorder(from, idx); },
+    };
+    return { dragOver, dragProps };
+}
+
+function EmptyState({ t, padding = 32, fontSize = 13, children }) {
+    return <div style={{ textAlign:"center", color:t.textTiny, padding:`${padding}px 0`, fontSize }}>{children}</div>;
+}
+
 // ── GoalItem ──────────────────────────────────────────────────────────────────
 
 function GoalItem({ goal, idx, onToggle, onRemove, onUpdate, onReorder, showPendingBadge, isDay, onAddSubtask, onToggleSubtask, onRemoveSubtask, projects, courses, t, s }) {
@@ -811,7 +864,7 @@ function GoalItem({ goal, idx, onToggle, onRemove, onUpdate, onReorder, showPend
     const [editText,    setEditText]    = useState(goal.text);
     const [showNote,    setShowNote]    = useState(false);
     const [noteText,    setNoteText]    = useState(goal.note || "");
-    const [dragOver,    setDragOver]    = useState(false);
+    const { dragOver, dragProps } = useDragReorder(idx, onReorder);
     const [showSubs,    setShowSubs]    = useState(false);
     const [subText,     setSubText]     = useState("");
     const [addingSub,   setAddingSub]   = useState(false);
@@ -833,11 +886,7 @@ function GoalItem({ goal, idx, onToggle, onRemove, onUpdate, onReorder, showPend
 
     return (
         <div
-            draggable
-            onDragStart={e => e.dataTransfer.setData("text/plain", String(idx))}
-            onDragOver={e => { e.preventDefault(); setDragOver(true); }}
-            onDragLeave={() => setDragOver(false)}
-            onDrop={e => { e.preventDefault(); setDragOver(false); const from = +e.dataTransfer.getData("text/plain"); if (from !== idx) onReorder(from, idx); }}
+            {...dragProps}
             className="fu"
             style={{ ...s.goalItem(goal.done), background: goal.doing&&!goal.done?"rgba(249,115,22,0.05)":"", border: goal.doing&&!goal.done?"1px solid rgba(249,115,22,0.18)":"", borderRadius: goal.doing&&!goal.done?10:undefined, outline: dragOver ? "2px dashed rgba(139,92,246,0.5)" : "none", animationDelay:`${idx*0.03}s`, opacity: goal.isBonus&&!goal.done ? 0.78 : 1 }}
         >
@@ -860,7 +909,7 @@ function GoalItem({ goal, idx, onToggle, onRemove, onUpdate, onReorder, showPend
                 }
                 <button
                     onClick={() => onUpdate({ level: goal.level >= 3 ? null : (goal.level || 0) + 1 })}
-                    title={goal.level ? `Coefficient ×${goal.level} — cliquer pour changer` : "Définir le coefficient"}
+                    title={goal.level ? tr("coef_change").replace("{n}",goal.level) : tr("coef_set")}
                     style={{ background: goal.level ? LEVEL_COLORS[goal.level]+"22" : "transparent", border:`1px solid ${goal.level ? LEVEL_COLORS[goal.level]+"55" : "transparent"}`, borderRadius:6, cursor:"pointer", fontSize:10, fontWeight:800, color: goal.level ? LEVEL_COLORS[goal.level] : t.textTiny, padding:"1px 5px", flexShrink:0, opacity: goal.level ? 1 : 0.3, transition:"all 0.15s", minWidth:22 }}
                     onMouseEnter={e=>{ e.currentTarget.style.opacity="1"; if(!goal.level) e.currentTarget.style.border="1px solid rgba(255,255,255,0.15)"; }}
                     onMouseLeave={e=>{ e.currentTarget.style.opacity=goal.level?"1":"0.3"; if(!goal.level) e.currentTarget.style.border="1px solid transparent"; }}>
@@ -868,14 +917,14 @@ function GoalItem({ goal, idx, onToggle, onRemove, onUpdate, onReorder, showPend
                 </button>
                 <button
                     onClick={() => onUpdate({ isBonus: !goal.isBonus })}
-                    title={goal.isBonus ? "Bonus ⭐ — ne compte pas dans le score" : "Marquer comme bonus"}
+                    title={goal.isBonus ? tr("bonus_on_tip") : tr("bonus_off_tip")}
                     style={{ background:"none", border:"none", cursor:"pointer", fontSize:11, opacity:goal.isBonus ? 0.9 : 0.22, padding:"1px 3px", flexShrink:0, transition:"opacity 0.15s" }}
                     onMouseEnter={e=>e.currentTarget.style.opacity="1"}
                     onMouseLeave={e=>e.currentTarget.style.opacity=goal.isBonus?"0.9":"0.22"}>⭐</button>
-                <button title={goal.recurring ? "Récurrent ✓" : "Récurrent (désactivé)"}
+                <button title={goal.recurring ? tr("recurring_on_tip") : tr("recurring_off_tip")}
                         onClick={() => onUpdate({ recurring: !goal.recurring })}
                         style={{ background:"none", border:"none", cursor:"pointer", fontSize:12, opacity:goal.recurring?0.9:0.2, transition:"opacity 0.15s", padding:"1px 3px", color:"#a78bfa", flexShrink:0 }}>🔄</button>
-                <button title="Note"
+                <button title={tr("note_tip")}
                         onClick={() => setShowNote(v => !v)}
                         style={{ background:"none", border:"none", cursor:"pointer", fontSize:12, opacity:(goal.note||showNote)?0.9:0.25, transition:"opacity 0.15s", padding:"1px 3px", color:showNote?"#f97316":t.textSub, flexShrink:0 }}>📝</button>
                 {isDay && (
@@ -907,7 +956,7 @@ function GoalItem({ goal, idx, onToggle, onRemove, onUpdate, onReorder, showPend
                 {p && <span onClick={() => { const ids=PRIORITIES.map(x=>x.id); const next=ids[(ids.indexOf(goal.priority)+1)%ids.length]; onUpdate({priority:next}); }} title={tr("tip_change_pri")} style={{ ...s.badge(priCol(p.id,t)), cursor:"pointer" }}>{p.label}</span>}
                 {goal.doing && !goal.done && (
                     <span className="doing-ring" style={{ fontSize:10, padding:"2px 8px", borderRadius:20, background:"rgba(249,115,22,0.15)", color:"#f97316", border:"1px solid rgba(249,115,22,0.35)", fontWeight:700, whiteSpace:"nowrap", flexShrink:0 }}>
-            ▶ {elapsedMin > 0 ? `${elapsedMin} min` : "en cours"}
+            ▶ {elapsedMin > 0 ? `${elapsedMin} min` : tr("in_progress_lbl")}
           </span>
                 )}
                 {goal.done && goal.elapsedMins > 0 && (
@@ -916,7 +965,7 @@ function GoalItem({ goal, idx, onToggle, onRemove, onUpdate, onReorder, showPend
           </span>
                 )}
                 {pendingDays >= 2 && (
-                    <span title={`En attente depuis ${pendingDays} jour${pendingDays>1?"s":""}`} style={{ fontSize:9, padding:"2px 6px", borderRadius:20, background:"rgba(249,115,22,0.12)", color:"#f97316", border:"1px solid rgba(249,115,22,0.25)", fontWeight:600, whiteSpace:"nowrap", flexShrink:0 }}>
+                    <span title={tr("pending_since").replace("{n}",pendingDays).replace("{s}",pendingDays>1?"s":"")} style={{ fontSize:9, padding:"2px 6px", borderRadius:20, background:"rgba(249,115,22,0.12)", color:"#f97316", border:"1px solid rgba(249,115,22,0.25)", fontWeight:600, whiteSpace:"nowrap", flexShrink:0 }}>
             {pendingDays}j
           </span>
                 )}
@@ -927,7 +976,7 @@ function GoalItem({ goal, idx, onToggle, onRemove, onUpdate, onReorder, showPend
             </div>
             {showTime && (
                 <div style={{ display:"flex", gap:8, alignItems:"center", padding:"7px 10px 8px", borderTop:`1px solid ${t.divider}`, flexWrap:"wrap" }}>
-                    <span style={{ fontSize:10, color:"#38bdf8", fontWeight:600, whiteSpace:"nowrap" }}>⏱ Heure :</span>
+                    <span style={{ fontSize:10, color:"#38bdf8", fontWeight:600, whiteSpace:"nowrap" }}>⏱ {tr("time_lbl")}</span>
                     <input type="time" value={editTime} onChange={e=>setEditTime(e.target.value)}
                            style={{ ...s.input, padding:"3px 7px", fontSize:12, width:110 }} />
                     <span style={{ fontSize:10, color:t.textDim, whiteSpace:"nowrap" }}>{tr("duration_lbl")}</span>
@@ -937,7 +986,7 @@ function GoalItem({ goal, idx, onToggle, onRemove, onUpdate, onReorder, showPend
                             style={{ padding:"3px 10px", borderRadius:7, border:"none", background:"rgba(56,189,248,0.2)", color:"#38bdf8", cursor:"pointer", fontSize:11, fontWeight:600 }}>✓</button>
                     {goal.startTime && (
                         <button onClick={() => { onUpdate({ startTime:null, duration:null }); setShowTime(false); }}
-                                style={{ padding:"3px 8px", borderRadius:7, border:"none", background:"rgba(248,113,113,0.12)", color:"#f87171", cursor:"pointer", fontSize:11 }}>Effacer</button>
+                                style={{ padding:"3px 8px", borderRadius:7, border:"none", background:"rgba(248,113,113,0.12)", color:"#f87171", cursor:"pointer", fontSize:11 }}>{tr("clear_btn")}</button>
                     )}
                 </div>
             )}
@@ -1061,7 +1110,8 @@ export default function App() {
     useEffect(() => {
         loadFromFile().then(fileData => {
             const localRaw = localStorage.getItem("goalsAppV2");
-            const localData = localRaw ? JSON.parse(localRaw) : null;
+            let localData = null;
+            try { const parsed = localRaw ? JSON.parse(localRaw) : null; localData = isValidAppData(parsed) ? parsed : null; } catch { /* corrupted local data, ignore */ }
 
             const fileTs  = fileData?._savedAt  || 0;
             const localTs = localData?._savedAt || 0;
@@ -1114,7 +1164,7 @@ const [saveStatus, setSaveStatus] = useState("saved");
 const saveTimerRef = useRef(null);
 
 const persist = nd => {
-    const ndWithTs = { ...nd, _savedAt: Date.now() };
+    const ndWithTs = { ...nd, _savedAt: Date.now(), _schemaVersion: SCHEMA_VERSION };
     setData(ndWithTs);
     setSaveStatus("pending");
     if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
@@ -1122,7 +1172,7 @@ const persist = nd => {
         setSaveStatus("saving");
         try {
             const body = JSON.stringify(nd);
-            try { localStorage.setItem("goalsAppV2", body); } catch {}
+            try { localStorage.setItem("goalsAppV2", body); } catch { /* storage unavailable/full, ignore */ }
             const ok = navigator.sendBeacon
                 ? navigator.sendBeacon("/api/save", new Blob([body], { type:"application/json" }))
                 : await fetch("/api/save", { method:"POST", headers:{"Content-Type":"application/json"}, body }).then(r=>r.ok);
@@ -1139,6 +1189,11 @@ useEffect(() => {
     window.addEventListener("beforeunload", handle);
     return () => window.removeEventListener("beforeunload", handle);
 }, []);
+
+const hasDoingTask = useMemo(
+    () => Object.values(data.days||{}).some(day=>(day.goals||[]).some(g=>g.doing&&!g.done)),
+    [data.days]
+);
 
     // ── Data accessors ──
     const getDayGoals     = dk      => data.days?.[dk]?.goals || [];
@@ -1196,6 +1251,7 @@ useEffect(() => {
     const removeMovie    = id        => persist({ ...data, movies: getMovies().filter(m=>m.id!==id) });
     const toggleMovieSeen = id       => persist({ ...data, movies: getMovies().map(m=>m.id===id ? { ...m, done:!m.done, seenAt: !m.done ? getTodayKey() : null } : m) });
     const reorderMovies  = (from,to) => { const arr=[...getMovies()]; const [item]=arr.splice(from,1); arr.splice(to,0,item); persist({ ...data, movies:arr }); };
+    const updateMovie    = (id,patch)=> persist({ ...data, movies: getMovies().map(m=>m.id===id?{...m,...patch}:m) });
     // ── Budget ──
     const getBudgetData       = ()          => data.budget || {};
     const getBudgetExpenses   = ()          => getBudgetData().expenses || [];
@@ -1374,7 +1430,6 @@ useEffect(() => {
 
     // ── Day goal handlers ──
     const addDayGoal      = (dk,text,cat="perso",pri="mid") => { if (!text.trim()) return; setDayGoals(dk,[...getDayGoals(dk),{id:uid(),text:text.trim(),cat,priority:pri,done:false,createdAt:dk}]); };
-    const checkDayPreset  = (dk,p) => { const gs=getDayGoals(dk); const ex=gs.find(g=>g.text===p.text); if(ex){ toggleDayGoal(dk,ex.id); } else { setDayGoals(dk,[...gs,{id:uid(),text:p.text.trim(),cat:p.cat,priority:p.priority,done:true,createdAt:dk}]); playDone(soundOn); } };
     const toggleDayGoal = (dk,id) => {
         const gs = getDayGoals(dk), g = gs.find(x => x.id === id); if (!g) return;
         let patch;
@@ -1446,8 +1501,6 @@ useEffect(() => {
         const newTodos = getTodoItems().filter(x=>x.id!==id);
         persist({ ...data, days:{ ...data.days, [dk]:{ ...data.days?.[dk], goals:newDayGoals } }, todo:newTodos });
     };
-    // kept for backward compat
-    const scheduleTodoToday = id => scheduleTodoToDay(id, todayKey);
 
     // ── Habit handlers ──
     const getWeeklyHabitsList = () => data.habits?.weeklyList ?? WEEKLY_HABITS;
@@ -1525,7 +1578,7 @@ useEffect(() => {
         };
         const id = setInterval(check, 60000);
         return () => clearInterval(id);
-    }, [data]); // eslint-disable-line
+    }, [data]);
 
     // ── Keyboard shortcuts ──
     useEffect(() => {
@@ -1570,14 +1623,20 @@ useEffect(() => {
     const exportPDF = () => {
         const html = generatePDFHtml(data);
         const w = window.open("","_blank");
-        if (!w) { alert("Autorise les pop-ups pour exporter en PDF"); return; }
+        if (!w) { alert(tr("popup_blocked")); return; }
         w.document.write(html); w.document.close(); w.focus();
         setTimeout(()=>w.print(), 400);
     };
     const importData = e => {
         const file = e.target.files[0]; if (!file) return;
         const reader = new FileReader();
-        reader.onload = ev => { try { persist(JSON.parse(ev.target.result)); } catch { alert("Fichier invalide"); } };
+        reader.onload = ev => {
+            try {
+                const parsed = JSON.parse(ev.target.result);
+                if (!isValidAppData(parsed)) throw new Error("invalid shape");
+                persist(parsed);
+            } catch { alert(tr("invalid_file")); }
+        };
         reader.readAsText(file); e.target.value = "";
     };
 
@@ -1705,7 +1764,7 @@ useEffect(() => {
                                     {tr("presets_btn")}
                                 </button>
                             )}
-                            <button className="bt" onClick={()=>{ try{ localStorage.setItem("lang",_LANG==="fr"?"en":"fr"); }catch{} window.location.reload(); }} title="Switch language" style={{ padding:"7px 11px", borderRadius:10, border:`1px solid ${t.inpBdr}`, background:"transparent", color:t.textSub, fontSize:12, cursor:"pointer", fontWeight:600 }}>{tr("lang_toggle")}</button>
+                            <button className="bt" onClick={()=>{ try{ localStorage.setItem("lang",_LANG==="fr"?"en":"fr"); }catch{ /* storage unavailable, ignore */ } window.location.reload(); }} title="Switch language" style={{ padding:"7px 11px", borderRadius:10, border:`1px solid ${t.inpBdr}`, background:"transparent", color:t.textSub, fontSize:12, cursor:"pointer", fontWeight:600 }}>{tr("lang_toggle")}</button>
                             <button key={spinKey} className="bt tspin" onClick={()=>{ setSpinKey(k=>k+1); setIsDark(d=>{ localStorage.setItem("theme", d ? "light" : "dark"); return !d; }); }}
                                     style={{ ...btnStyle(false), borderColor:t.inpBdr }}>
                                 {t.themeIcon}
@@ -1717,11 +1776,11 @@ useEffect(() => {
                         {tab==="day"       && <DayView goals={getDayGoals(selectedDay)} dayKey={selectedDay} todayKey={todayKey} onAdd={(tx,cat,pri)=>addDayGoal(selectedDay,tx,cat,pri)} onToggle={id=>toggleDayGoal(selectedDay,id)} onRemove={id=>removeDayGoal(selectedDay,id)} onUpdate={(id,p)=>updateDayGoal(selectedDay,id,p)} onReorder={(f,to)=>reorderDayGoals(selectedDay,f,to)} showPresets={showDayPre} habits={getDailyHabitsList()} habitsDone={getDayHabits(selectedDay)} habitsData={data.habits} onToggleHabit={id=>toggleDayHabit(selectedDay,id)} journal={getDayJournal(selectedDay)} onJournalChange={tx=>setDayJournal(selectedDay,tx)} suggestions={getPendingSuggestions(selectedDay)} onAcceptSugg={task=>acceptSuggestion(selectedDay,task)} onDismissSugg={id=>dismissSuggestion(selectedDay,id)} onMarkSuggDone={task=>markSuggestionDone(selectedDay,task)} onAcceptAllSugg={()=>acceptAllSuggestions(selectedDay)} onDismissAllSugg={()=>dismissAllSuggestions(selectedDay)} weekDoneTasks={weekDays.reduce((sum,dk)=>{const gs=getDayGoals(dk);return sum+gs.filter(g=>g.done).length;},0)} monthTasks={getMonthTasks()} todoCount={getTodoItems().length} weekReview={getWeekReview(getWeekKey(new Date(selectedDay+"T12:00:00")))} onWeekReviewChange={(patch)=>setWeekReview(getWeekKey(new Date(selectedDay+"T12:00:00")),patch)} onAddSubtask={(goalId,text)=>addDayGoalSubtask(selectedDay,goalId,text)} onToggleSubtask={(goalId,subId)=>toggleDayGoalSubtask(selectedDay,goalId,subId)} onRemoveSubtask={(goalId,subId)=>removeDayGoalSubtask(selectedDay,goalId,subId)} mood={getDayMood(selectedDay)} onMoodChange={v=>setDayMood(selectedDay,v)} meals={getMeals(selectedDay)} onRemoveMeal={id=>removeMeal(selectedDay,id)} projects={getProjects()} courses={getCourses()} courseSessions={getCourseSessions(selectedDay)} upcomingExams={getExams().filter(e=>{ const diff=Math.round((new Date(e.date+"T12:00:00")-new Date(selectedDay+"T12:00:00"))/86400000); return diff>=0&&diff<=14; }).sort((a,b)=>a.date.localeCompare(b.date))} settings={getSettings()} onUpdateSettings={updateSettings} s={s} t={t} />}
                         {tab==="month"     && <MonthView tasks={getMonthTasks()} monthLabel={monthLabel} onAdd={addMonthTask} onToggle={toggleMonthTask} onRemove={removeMonthTask} s={s} t={t} />}
                         {tab==="habits"    && <HabitsView weekDone={getWeekHabits(getWeekKey(new Date(selectedDay+"T12:00:00")))} dayDone={getDayHabits(selectedDay)} onToggleWeek={id=>toggleWeekHabit(id,getWeekKey(new Date(selectedDay+"T12:00:00")))} onToggleDay={id=>toggleDayHabit(selectedDay,id)} habitsData={data.habits} weekKey={getWeekKey(new Date(selectedDay+"T12:00:00"))} selectedDay={selectedDay} weeklyHabits={getWeeklyHabitsList()} dailyHabits={getDailyHabitsList()} onAddWeekly={addWeeklyHabit} onRemoveWeekly={removeWeeklyHabit} onUpdateWeekly={updateWeeklyHabit} onReorderWeekly={reorderWeeklyHabits} onResetWeekly={resetWeeklyHabits} onAddDaily={addDailyHabit} onRemoveDaily={removeDailyHabit} onUpdateDaily={updateDailyHabit} onReorderDaily={reorderDailyHabits} onResetDaily={resetDailyHabits} s={s} t={t} />}
-                        {tab==="todo"      && <TodoView items={getTodoItems()} onAdd={addTodoItem} onRemove={removeTodoItem} onUpdate={updateTodoItem} onScheduleToday={scheduleTodoToday} onScheduleToDay={scheduleTodoToDay} s={s} t={t} />}
-                        {tab==="history"   && <HistoryView data={data} weekKey={weekKey} onDeletePomodoro={deletePomodoro} onJournalChange={(dk,tx)=>setDayJournal(dk,tx)} onDeleteGoal={(dk,id)=>removeDayGoal(dk,id)} s={s} t={t} />}
+                        {tab==="todo"      && <TodoView items={getTodoItems()} onAdd={addTodoItem} onRemove={removeTodoItem} onUpdate={updateTodoItem} onScheduleToDay={scheduleTodoToDay} s={s} t={t} />}
+                        {tab==="history"   && <HistoryView data={data} onDeletePomodoro={deletePomodoro} onJournalChange={(dk,tx)=>setDayJournal(dk,tx)} onDeleteGoal={(dk,id)=>removeDayGoal(dk,id)} s={s} t={t} />}
                         {tab==="analytics" && <AnalyticsView data={data} weekKey={weekKey} monthKey={monthKey} dailyHabitsCount={getDailyHabitsList().length} journal={data.journal||{}} weekReviews={data.weekReviews||{}} pomodoro={data.pomodoro||{}} settings={getSettings()} onDeleteGoal={(dk,id)=>removeDayGoal(dk,id)} t={t} s={s} />}
-                        {tab==="recipes"   && <RecipesView recipes={getRecipes()} meals={data.meals||{}} onAdd={addRecipe} onUpdate={updateRecipe} onDelete={deleteRecipe} onAddMeal={addMeal} onRemoveMeal={removeMeal} s={s} t={t} />}
-                        {tab==="movies"    && <MoviesView movies={getMovies()} onAdd={addMovie} onRemove={removeMovie} onToggleSeen={toggleMovieSeen} onReorder={reorderMovies} s={s} t={t} />}
+                        {tab==="recipes"   && <RecipesView recipes={getRecipes()} meals={data.meals||{}} onAdd={addRecipe} onUpdate={updateRecipe} onDelete={deleteRecipe} onAddMeal={addMeal} s={s} t={t} />}
+                        {tab==="movies"    && <MoviesView movies={getMovies()} onAdd={addMovie} onRemove={removeMovie} onToggleSeen={toggleMovieSeen} onReorder={reorderMovies} onUpdate={updateMovie} s={s} t={t} />}
                         {tab==="cours"     && <CoursesView courses={getCourses()} courseProgress={data.courseProgress||{}} exams={getExams()} onAddCourse={addCourse} onUpdateCourse={updateCourse} onDeleteCourse={deleteCourse} onToggleSession={toggleCourseSession} onAddExam={addExam} onUpdateExam={updateExam} onDeleteExam={deleteExam} data={data} s={s} t={t} />}
                         {tab==="projets"   && <ProjectsView projects={getProjects()} data={data} onAddProject={addProject} onUpdateProject={updateProject} onDeleteProject={deleteProject} s={s} t={t} />}
                         {tab==="budget"    && <BudgetView expenses={getBudgetExpenses()} contributions={getBudgetContribs()} reimbursements={getBudgetReimbs()} settings={getBudgetSettings()} onAddExpense={addBudgetExpense} onUpdateExpense={updateBudgetExpense} onDeleteExpense={deleteBudgetExpense} onAddContribution={addBudgetContrib} onDeleteContribution={deleteBudgetContrib} onUpdateSettings={updateBudgetSettings} onAddReimb={addBudgetReimb} onDeleteReimb={deleteBudgetReimb} visible={budgetVisible} onShow={()=>setBudgetVisible(true)} onHide={()=>setBudgetVisible(false)} s={s} t={t} />}
@@ -1736,6 +1795,7 @@ useEffect(() => {
                         searchInputRef={searchInputRef}
                         onClose={()=>{ setShowSearch(false); setSearchQ(""); }}
                         onGoToDay={dk=>{ setSelectedDay(dk); setTab("day"); }}
+                        onGoToMovies={()=>setTab("movies")}
                     />
                 )}
 
@@ -1759,7 +1819,7 @@ useEffect(() => {
                         <button onClick={()=>setUndo(null)} style={{ background:"none", border:"none", color:t.textSub, cursor:"pointer", fontSize:14 }}>✕</button>
                     </div>
                 )}
-                {(pomoOpen || Object.values(data.days||{}).some(day=>(day.goals||[]).some(g=>g.doing&&!g.done))) && <PomodoroWidget soundOn={soundOn} onClose={()=>setPomoOpen(false)} onWorkComplete={logPomodoro} allTasks={getDayGoals(todayKey).filter(g=>!g.done)} doingTasks={getDayGoals(todayKey).filter(g=>g.doing&&!g.done)} elapsedRef={pomoElapsedRef} resetRef={pomoResetRef} t={t} />}
+                {(pomoOpen || hasDoingTask) && <PomodoroWidget soundOn={soundOn} onClose={()=>setPomoOpen(false)} onWorkComplete={logPomodoro} allTasks={getDayGoals(todayKey).filter(g=>!g.done)} doingTasks={getDayGoals(todayKey).filter(g=>g.doing&&!g.done)} elapsedRef={pomoElapsedRef} resetRef={pomoResetRef} t={t} />}
             </div>
         </>
     );
@@ -1793,7 +1853,7 @@ function Checkbox({ done, doing, color="#34d399", t, onToggle }) {
                     cursor:"pointer", flexShrink:0, display:"flex", alignItems:"center", justifyContent:"center",
                     boxShadow:done?`0 0 12px ${color}55`:"none", transition:"border-color 0.2s,background 0.2s" }}
                 onClick={onToggle}
-                title={done?"Terminer → Réinitialiser":doing?"Marquer comme terminé":"Démarrer"}>
+                title={done?tr("ck_reset"):doing?tr("ck_mark_done"):tr("ck_start")}>
             {done  && <span style={{ color:"#0f0f1a", fontSize:11, fontWeight:900 }}>✓</span>}
             {doing && !done && <span style={{ color:"#f97316", fontSize:10, fontWeight:900 }}>▶</span>}
         </button>
@@ -1809,7 +1869,7 @@ function GoalFilters({ filterStatus, setFS, filterCat, setFC, t }) {
                 </button>
             ))}
             <span style={{ color:t.divider, margin:"0 4px", lineHeight:"26px" }}>|</span>
-            <button className="fp" style={{ padding:"4px 12px", borderRadius:20, border:`1px solid ${filterCat==="all"?"rgba(139,92,246,0.5)":t.filterBdr}`, background:filterCat==="all"?t.filterActive:"transparent", color:filterCat==="all"?"#c4b5fd":t.textSub, fontSize:11, cursor:"pointer" }} onClick={()=>setFC("all")}>Tous</button>
+            <button className="fp" style={{ padding:"4px 12px", borderRadius:20, border:`1px solid ${filterCat==="all"?"rgba(139,92,246,0.5)":t.filterBdr}`, background:filterCat==="all"?t.filterActive:"transparent", color:filterCat==="all"?"#c4b5fd":t.textSub, fontSize:11, cursor:"pointer" }} onClick={()=>setFC("all")}>{tr("all_cats_lbl")}</button>
             {CATEGORIES.map(c=>{ const cc=catCol(c.id,t); return (
                 <button key={c.id} className="fp" style={{ padding:"4px 10px", borderRadius:20, border:`1px solid ${filterCat===c.id?cc+"bb":t.filterBdr}`, background:filterCat===c.id?cc+"22":"transparent", color:filterCat===c.id?cc:t.textSub, fontSize:11, cursor:"pointer" }} onClick={()=>setFC(c.id)}>{CAT_ICONS[c.id]}</button>
             );})}
@@ -1848,7 +1908,7 @@ function PresetPanel({ habits, habitsDone, habitsData, dayKey, onToggle, label, 
             </div>
             <div style={{ padding:"10px 12px", overflowY:"auto", maxHeight:460 }}>
                 {habits.length === 0
-                    ? <div style={{ textAlign:"center", color:t.textTiny, padding:"24px 0", fontSize:12 }}>{tr("habits_empty_daily")}</div>
+                    ? <EmptyState t={t} padding={24} fontSize={12}>{tr("habits_empty_daily")}</EmptyState>
                     : habits.map(h => {
                         const isDone = habitsDone.includes(h.id);
                         const streak = dayKey ? computeDayStreak(h.id, habitsData, dayKey) : 0;
@@ -1903,6 +1963,10 @@ function DayView({ goals, dayKey, onAdd, onToggle, onRemove, onUpdate, onReorder
             if (journalDraft !== journal) onJournalChange(journalDraft);
         }, 500);
         return () => clearTimeout(journalSaveRef.current);
+        // Intentionally scoped to journalDraft only: this is a debounce-on-edit effect,
+        // re-running it when `journal` (the just-saved value) or `onJournalChange` change
+        // would retrigger the timer and break the debounce.
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [journalDraft]);
 
     const dayOfWeek = (() => { const d = new Date(dayKey + "T12:00:00"); return (d.getDay()+6)%7; })(); // Mon=0
@@ -1994,7 +2058,7 @@ function DayView({ goals, dayKey, onAdd, onToggle, onRemove, onUpdate, onReorder
                                         : { label:tr("ambitious_day"), color:"#fb923c" };
                             return <span style={{ fontSize:10, padding:"2px 9px", borderRadius:20, background:info.color+"1a", color:info.color, border:`1px solid ${info.color}33`, fontWeight:600 }}>{info.label}</span>;
                         })()}
-                        <span style={{ fontSize:11, color:t.textDim }}>{done}/{goals.length}</span>
+                        <span style={{ fontSize:11, color:goals.length>0?pcol:t.textDim }}>{done}/{goals.length}</span>
                         <button onClick={()=>setVM(v=>v==="list"?"horaire":"list")}
                                 style={{ fontSize:11, padding:"3px 10px", borderRadius:8, border:`1px solid ${viewMode==="horaire"?"rgba(56,189,248,0.45)":t.inpBdr}`, background:viewMode==="horaire"?"rgba(56,189,248,0.12)":"transparent", color:viewMode==="horaire"?"#38bdf8":t.textSub, cursor:"pointer", fontWeight:viewMode==="horaire"?600:400, flexShrink:0 }}>
                             {viewMode==="list"?tr("timeline_btn"):tr("list_btn")}
@@ -2084,7 +2148,7 @@ function DayView({ goals, dayKey, onAdd, onToggle, onRemove, onUpdate, onReorder
                                     {committedFiltered.length===0 && bonusFiltered.length===0
                                         ? <div style={{textAlign:"center",color:t.textTiny,padding:"32px 0",fontSize:13}}>{tr("no_tasks_day")}</div>
                                         : <>
-                                            {committedFiltered.map((g,i)=>(
+                                            {committedFiltered.map((g)=>(
                                                 <GoalItem key={g.id} goal={g} idx={goals.indexOf(g)} onToggle={()=>onToggle(g.id)} onRemove={()=>onRemove(g.id)} onUpdate={p=>onUpdate(g.id,p)} onReorder={handleReorder} showPendingBadge isDay onAddSubtask={text=>onAddSubtask(g.id,text)} onToggleSubtask={sid=>onToggleSubtask(g.id,sid)} onRemoveSubtask={sid=>onRemoveSubtask(g.id,sid)} projects={projects||[]} courses={courses||[]} t={t} s={s} />
                                             ))}
                                             {bonusFiltered.length>0 && (
@@ -2094,7 +2158,7 @@ function DayView({ goals, dayKey, onAdd, onToggle, onRemove, onUpdate, onReorder
                                                         <span style={{ fontSize:10, color:t.textDim, fontWeight:600, whiteSpace:"nowrap" }}>⭐ Bonus</span>
                                                         <div style={{ flex:1, height:1, background:t.divider }}/>
                                                     </div>
-                                                    {bonusFiltered.map((g,i)=>(
+                                                    {bonusFiltered.map((g)=>(
                                                         <GoalItem key={g.id} goal={g} idx={goals.indexOf(g)} onToggle={()=>onToggle(g.id)} onRemove={()=>onRemove(g.id)} onUpdate={p=>onUpdate(g.id,p)} onReorder={handleReorder} showPendingBadge isDay onAddSubtask={text=>onAddSubtask(g.id,text)} onToggleSubtask={sid=>onToggleSubtask(g.id,sid)} onRemoveSubtask={sid=>onRemoveSubtask(g.id,sid)} projects={projects||[]} courses={courses||[]} t={t} s={s} />
                                                     ))}
                                                 </>
@@ -2106,7 +2170,7 @@ function DayView({ goals, dayKey, onAdd, onToggle, onRemove, onUpdate, onReorder
                         </div>
                     ) : (
                         <div style={{ padding:"12px 14px", maxHeight:520, overflowY:"auto" }}>
-                            <TimelineView goals={goals} courseSessions={courseSessions||[]} projects={projects||[]} dayKey={dayKey} onToggleGoal={onToggle} t={t} s={s} />
+                            <TimelineView goals={goals} courseSessions={courseSessions||[]} projects={projects||[]} dayKey={dayKey} onToggleGoal={onToggle} t={t} />
                         </div>
                     )}
                     <CatProgressBars goals={goals} t={t} />
@@ -2206,7 +2270,7 @@ function DayView({ goals, dayKey, onAdd, onToggle, onRemove, onUpdate, onReorder
                                 const v = i+1;
                                 return (
                                     <button key={v} onClick={()=>onMoodChange(mood===v?0:v)}
-                                            title={["Difficile","Bof","Neutre","Bien","Super !"][i]}
+                                            title={tr("mood_labels")[i]}
                                             style={{ background:mood===v?"rgba(139,92,246,0.2)":"transparent", border:`1px solid ${mood===v?"rgba(139,92,246,0.5)":"transparent"}`, borderRadius:8, padding:"2px 4px", cursor:"pointer", fontSize:15, opacity:mood===0||mood===v?1:0.35, transition:"all 0.15s" }}>
                                         {em}
                                     </button>
@@ -2300,7 +2364,7 @@ function HabitRow({ habit, idx, done, streak, onToggle, onRemove, onUpdate, onRe
     const [editing,  setEditing]  = useState(false);
     const [editText, setEditText] = useState(habit.text);
     const [editIcon, setEditIcon] = useState(habit.icon);
-    const [dragOver, setDragOver] = useState(false);
+    const { dragOver, dragProps } = useDragReorder(idx, onReorder, "habitIdx");
 
     const commitEdit = () => {
         if (editText.trim()) onUpdate(habit.id, { text:editText.trim(), icon:editIcon||habit.icon });
@@ -2309,11 +2373,7 @@ function HabitRow({ habit, idx, done, streak, onToggle, onRemove, onUpdate, onRe
 
     return (
         <div
-            draggable
-            onDragStart={e=>{ e.dataTransfer.setData("habitIdx", String(idx)); }}
-            onDragOver={e=>{ e.preventDefault(); setDragOver(true); }}
-            onDragLeave={()=>setDragOver(false)}
-            onDrop={e=>{ e.preventDefault(); setDragOver(false); const from=+e.dataTransfer.getData("habitIdx"); if(from!==idx) onReorder(from,idx); }}
+            {...dragProps}
             className="fu"
             style={{ display:"flex", alignItems:"center", gap:11, padding:"11px 14px", borderRadius:10, marginBottom:5, background:done?"rgba(52,211,153,0.06)":t.habitBg, border:`1px solid ${dragOver?"rgba(139,92,246,0.5)":done?"rgba(52,211,153,0.2)":t.cardBdr}`, outline:dragOver?"2px dashed rgba(139,92,246,0.35)":"none" }}>
             <span style={{ cursor:"grab", color:t.textTiny, fontSize:13, flexShrink:0, userSelect:"none" }}>⠿</span>
@@ -2484,7 +2544,7 @@ function TodoItemRow({ item, i, p, isEditing, editText, setEditing, setEditText,
 
 // ── TodoView ──────────────────────────────────────────────────────────────────
 
-function TodoView({ items, onAdd, onRemove, onUpdate, onScheduleToday, onScheduleToDay, s, t }) {
+function TodoView({ items, onAdd, onRemove, onUpdate, onScheduleToDay, s, t }) {
     const [text,    setText]    = useState("");
     const [cat,     setCat]     = useState("perso");
     const [pri,     setPri]     = useState("mid");
@@ -2497,7 +2557,7 @@ function TodoView({ items, onAdd, onRemove, onUpdate, onScheduleToday, onSchedul
 
     const groups = groupBy
         ? CATEGORIES.map(c => ({ ...c, items: visible.filter(x => x.cat === c.id) })).filter(g => g.items.length > 0)
-        : [{ id:"all", label:"Toutes", color:"#a78bfa", items: visible }];
+        : [{ id:"all", label:tr("all_lbl"), color:"#a78bfa", items: visible }];
 
     const commitEdit = (id) => {
         if (editText.trim()) onUpdate(id, { text: editText.trim() });
@@ -2777,7 +2837,7 @@ function SectionHeader({ label, count, open, onToggle, t }) {
     );
 }
 
-function HistoryView({ data, weekKey, onDeletePomodoro, onJournalChange, onDeleteGoal, s, t }) {
+function HistoryView({ data, onDeletePomodoro, onJournalChange, onDeleteGoal, s, t }) {
     const [query, setQuery] = useState("");
     const [openSections, setOpenSections] = useState({ journal: true, days: false, pomo: false });
     const [openItems, setOpenItems] = useState({});
@@ -2795,7 +2855,7 @@ function HistoryView({ data, weekKey, onDeletePomodoro, onJournalChange, onDelet
 
     // Day task history
     const dayEntries = Object.entries(data.days||{})
-        .filter(([dk, dv]) => (dv.goals||[]).length > 0)
+        .filter(([, dv]) => (dv.goals||[]).length > 0)
         .filter(([dk, dv]) => !q || dk.includes(q) || (dv.goals||[]).some(g => g.text.toLowerCase().includes(q)))
         .sort(([a],[b]) => b.localeCompare(a));
 
@@ -2829,7 +2889,7 @@ function HistoryView({ data, weekKey, onDeletePomodoro, onJournalChange, onDelet
                 {openSections.journal && (
                     <div style={{ padding:"10px 14px", display:"flex", flexDirection:"column", gap:8 }}>
                         {journalEntries.length === 0
-                            ? <div style={{ textAlign:"center", color:t.textTiny, padding:"24px 0", fontSize:12 }}>{q?tr("no_entries_q"):tr("no_entries")}</div>
+                            ? <EmptyState t={t} padding={24} fontSize={12}>{q?tr("no_entries_q"):tr("no_entries")}</EmptyState>
                             : journalEntries.map(([dk, tx]) => {
                                 const isOpen = openItems["j_"+dk] !== false;
                                 return <JournalHistoryEntry key={dk} dk={dk} tx={tx} isOpen={isOpen} onToggle={()=>toggleItem("j_"+dk)} onSave={txt=>onJournalChange(dk,txt)} t={t} s={s} />;
@@ -2845,7 +2905,7 @@ function HistoryView({ data, weekKey, onDeletePomodoro, onJournalChange, onDelet
                 {openSections.days && (
                     <div style={{ padding:"10px 14px", display:"flex", flexDirection:"column", gap:8 }}>
                         {dayEntries.length === 0
-                            ? <div style={{ textAlign:"center", color:t.textTiny, padding:"24px 0", fontSize:12 }}>{q?tr("no_days_q"):tr("no_days")}</div>
+                            ? <EmptyState t={t} padding={24} fontSize={12}>{q?tr("no_days_q"):tr("no_days")}</EmptyState>
                             : dayEntries.map(([dk, dv]) => {
                                 const isOpen = !!openItems["d_"+dk];
                                 const goals = q ? (dv.goals||[]).filter(g => !q || g.text.toLowerCase().includes(q) || dk.includes(q)) : (dv.goals||[]);
@@ -2866,10 +2926,14 @@ function HistoryView({ data, weekKey, onDeletePomodoro, onJournalChange, onDelet
                                         {isOpen && (
                                             <div style={{ padding:"10px 14px", display:"flex", flexDirection:"column", gap:5 }}>
                                                 {goals.map(g => (
-                                                    <div key={g.id} style={{ display:"flex", alignItems:"center", gap:8, fontSize:12, color:g.done?t.textSub:t.text }}>
+                                                    <div key={g.id} className="fu" style={{ display:"flex", alignItems:"center", gap:8, fontSize:12, color:g.done?t.textSub:t.text }}>
                                                         <span style={{ color:g.done?"#34d399":"#f87171", fontSize:11, minWidth:14 }}>{g.done?"✓":"✕"}</span>
                                                         <span style={{ fontSize:13 }}>{CAT_ICONS[g.cat]||"•"}</span>
-                                                        <span style={{ textDecoration:g.done?"line-through":"none", opacity:g.done?0.6:1 }}>{g.text}</span>
+                                                        <span style={{ flex:1, textDecoration:g.done?"line-through":"none", opacity:g.done?0.6:1 }}>{g.text}</span>
+                                                        <button onClick={() => onDeleteGoal(dk, g.id)}
+                                                                style={{ background:"none", border:"none", cursor:"pointer", color:t.delColor, fontSize:12, padding:"2px 5px", opacity:0.35, transition:"opacity 0.15s" }}
+                                                                onMouseEnter={e=>e.currentTarget.style.opacity="1"} onMouseLeave={e=>e.currentTarget.style.opacity="0.35"}
+                                                                title={tr("tip_delete_perm")}>✕</button>
                                                     </div>
                                                 ))}
                                             </div>
@@ -2947,55 +3011,62 @@ function HistoryView({ data, weekKey, onDeletePomodoro, onJournalChange, onDelet
 function AnalyticsView({ data, weekKey, monthKey, dailyHabitsCount, journal, weekReviews, pomodoro, settings, onDeleteGoal, t, s }) {
     const scoreTarget = settings?.scoreTarget ?? SCORE_TARGET;
     const scoreMinL3  = settings?.scoreMinL3  ?? SCORE_MIN_L3;
-    const today = new Date(getTodayKey());
+    const todayKeyStr = getTodayKey();
 
-    // All-time goals (for stacked bar)
-    const allGoals = Object.values(data.days||{}).flatMap(d=>d.goals||[]);
+    // All-time goals (for stacked bar) — recomputed only when day data actually changes
+    const allGoals = useMemo(() => Object.values(data.days||{}).flatMap(d=>d.goals||[]), [data.days]);
 
     // Journal entries sorted by date desc
-    const journalEntries = Object.entries(journal)
+    const journalEntries = useMemo(() => Object.entries(journal)
         .filter(([,tx])=>tx.trim())
         .sort(([a],[b])=>b.localeCompare(a))
-        .slice(0,5);
+        .slice(0,5), [journal]);
 
     // Habit heatmap: 12 weeks × 7 days
-    const heatStart = new Date(weekKey); heatStart.setDate(heatStart.getDate() - 11*7);
-    const heatCols  = Array.from({length:12}, (_,wi) =>
-        Array.from({length:7}, (_,di) => {
-            const d = new Date(heatStart); d.setDate(d.getDate() + wi*7 + di);
-            const dk = d.toISOString().slice(0,10);
-            const done = (data.habits?.days?.[dk]?.done||[]).length;
-            const total = dailyHabitsCount || 1;
-            return { dk, done, total, isFuture: d > today };
-        })
-    );
+    const heatCols = useMemo(() => {
+        const heatStart = new Date(weekKey); heatStart.setDate(heatStart.getDate() - 11*7);
+        const todayD = new Date(todayKeyStr);
+        return Array.from({length:12}, (_,wi) =>
+            Array.from({length:7}, (_,di) => {
+                const d = new Date(heatStart); d.setDate(d.getDate() + wi*7 + di);
+                const dk = d.toISOString().slice(0,10);
+                const done = (data.habits?.days?.[dk]?.done||[]).length;
+                const total = dailyHabitsCount || 1;
+                return { dk, done, total, isFuture: d > todayD };
+            })
+        );
+    }, [weekKey, data.habits, dailyHabitsCount, todayKeyStr]);
 
     // Feature 3: Best day of week (4 dernières semaines, exclut aujourd'hui)
-    const weekdayStats = Array.from({length:7}, (_,wi) => {
-        const cutoff = new Date(today); cutoff.setDate(cutoff.getDate() - 28);
-        const todayKey2 = dateToKey(today);
-        const daysForWd = Object.entries(data.days||{}).filter(([dk]) => {
-            if (dk >= todayKey2) return false; // exclut aujourd'hui et futur
-            const d = localDate(dk);
-            return (d.getDay()+6)%7 === wi && d >= cutoff; // 4 semaines max
+    const { weekdayStats, bestWd, maxWdAvg } = useMemo(() => {
+        const stats = Array.from({length:7}, (_,wi) => {
+            const cutoff = new Date(todayKeyStr); cutoff.setDate(cutoff.getDate() - 28);
+            const daysForWd = Object.entries(data.days||{}).filter(([dk]) => {
+                if (dk >= todayKeyStr) return false; // exclut aujourd'hui et futur
+                const d = localDate(dk);
+                return (d.getDay()+6)%7 === wi && d >= cutoff; // 4 semaines max
+            });
+            const withGoals = daysForWd.filter(([,dv]) => (dv.goals||[]).length > 0); // au moins 1 tâche entrée
+            if (!withGoals.length) return { wd:wi, avg:0, count:0 };
+            const avg = withGoals.reduce((sum,[,dv]) => {
+                const gs = dv.goals||[];
+                const settled = gs.filter(g => !g.doing || g.done);
+                const done = settled.filter(g=>g.done).length;
+                return sum + (settled.length ? Math.round(done/settled.length*100) : 0);
+            }, 0) / withGoals.length;
+            return { wd:wi, avg:Math.round(avg), count:withGoals.length };
         });
-        const withGoals = daysForWd.filter(([,dv]) => (dv.goals||[]).length > 0); // au moins 1 tâche entrée
-        if (!withGoals.length) return { wd:wi, avg:0, count:0 };
-        const avg = withGoals.reduce((sum,[,dv]) => {
-            const gs = dv.goals||[];
-            const settled = gs.filter(g => !g.doing || g.done);
-            const done = settled.filter(g=>g.done).length;
-            return sum + (settled.length ? Math.round(done/settled.length*100) : 0);
-        }, 0) / withGoals.length;
-        return { wd:wi, avg:Math.round(avg), count:withGoals.length };
-    });
-    const bestWd = weekdayStats.reduce((best,cur) => cur.avg > best.avg ? cur : best, weekdayStats[0]);
-    const maxWdAvg = Math.max(...weekdayStats.map(w=>w.avg), 1);
+        return {
+            weekdayStats: stats,
+            bestWd: stats.reduce((best,cur) => cur.avg > best.avg ? cur : best, stats[0]),
+            maxWdAvg: Math.max(...stats.map(w=>w.avg), 1),
+        };
+    }, [data.days, todayKeyStr]);
 
     // Feature 4: Streak of complete days (>=80%)
-    const computeCurrentStreak = () => {
+    const { currentStreak, bestStreak } = useMemo(() => {
         let streak = 0;
-        const d = new Date(getTodayKey());
+        const d = new Date(todayKeyStr);
         while (true) {
             const dk = dateToKey(d);
             const gs = data.days?.[dk]?.goals || [];
@@ -3006,9 +3077,7 @@ function AnalyticsView({ data, weekKey, monthKey, dailyHabitsCount, journal, wee
             streak++;
             d.setDate(d.getDate()-1);
         }
-        return streak;
-    };
-    const computeBestStreak = () => {
+
         const allDks = Object.keys(data.days||{}).sort();
         let best = 0, cur = 0;
         for (const dk of allDks) {
@@ -3019,29 +3088,13 @@ function AnalyticsView({ data, weekKey, monthKey, dailyHabitsCount, journal, wee
             }
             cur = 0;
         }
-        return best;
-    };
-    const currentStreak = computeCurrentStreak();
-    const bestStreak = computeBestStreak();
-
-    // Best day of current week (most tasks done)
-    const bestDayThisWeek = (() => {
-        const weekStart = new Date(weekKey + "T12:00:00");
-        let best = null;
-        for (let i = 0; i < 7; i++) {
-            const d = new Date(weekStart); d.setDate(d.getDate() + i);
-            const dk = dateToKey(d);
-            const gs = data.days?.[dk]?.goals || [];
-            const done = gs.filter(g => g.done).length;
-            if (done > 0 && (!best || done > best.done)) best = { dk, done, label: DAYS_FR[i] };
-        }
-        return best;
-    })();
+        return { currentStreak: streak, bestStreak: best };
+    }, [data.days, todayKeyStr]);
 
     // Monthly category breakdown
-    const monthGoals = Object.entries(data.days||{})
+    const monthGoals = useMemo(() => Object.entries(data.days||{})
         .filter(([dk]) => dk.startsWith(monthKey))
-        .flatMap(([,dv]) => dv.goals||[]);
+        .flatMap(([,dv]) => dv.goals||[]), [data.days, monthKey]);
 
     return (
         <div className="fi" style={{ display:"grid", gap:18 }}>
@@ -3053,8 +3106,10 @@ function AnalyticsView({ data, weekKey, monthKey, dailyHabitsCount, journal, wee
 
             {/* Score journalier — coefficient analytics */}
             {(() => {
+                const cutoff90 = new Date(todayKeyStr); cutoff90.setDate(cutoff90.getDate() - 90);
+                const cutoff90Key = dateToKey(cutoff90);
                 const days90 = Object.entries(data.days||{})
-                    .filter(([dk]) => dk >= dateToKey(new Date(Date.now()-90*86400000)))
+                    .filter(([dk]) => dk >= cutoff90Key)
                     .map(([dk, dv]) => {
                         const gs = dv?.goals||[];
                         const committed = gs.filter(g=>!g.isBonus);
@@ -3122,7 +3177,7 @@ function AnalyticsView({ data, weekKey, monthKey, dailyHabitsCount, journal, wee
                         </div>
                         <div style={{ padding:"16px 20px" }}>
                             <div style={{ display:"flex", alignItems:"flex-end", gap:4, height:90 }}>
-                                {days14.map((d,i) => {
+                                {days14.map((d) => {
                                     const h = d.mins ? Math.max((d.mins/maxMins)*100, 6) : 0;
                                     const isToday = d.dk === getTodayKey();
                                     const col = isToday ? "#c4b5fd" : "#8b5cf6";
@@ -3243,7 +3298,7 @@ function AnalyticsView({ data, weekKey, monthKey, dailyHabitsCount, journal, wee
                         <div style={{ padding:"16px 20px" }}>
                             {/* Barre empilée */}
                             <div style={{ display:"flex", borderRadius:99, overflow:"hidden", height:22, marginBottom:14 }}>
-                                {segments.map((seg, i) => (
+                                {segments.map((seg) => (
                                     <div key={seg.id} className="pb"
                                          title={`${seg.label} : ${seg.count} tâches (${seg.pct}%)`}
                                          style={{ width:`${seg.pct}%`, background:catCol(seg.id,t), display:"flex", alignItems:"center", justifyContent:"center", transition:"width 0.9s cubic-bezier(0.4,0,0.2,1)", minWidth: seg.pct > 5 ? undefined : 0, overflow:"hidden" }}>
@@ -3467,20 +3522,22 @@ function PomodoroWidget({ soundOn, onClose, onWorkComplete, doingTasks, allTasks
     const modeRef              = useRef("work");
     const secsRef              = useRef(WORK_S);
     const soundRef             = useRef(soundOn);
-    const justDoneRef          = useRef(false);
+    const linkedIdRef          = useRef(linkedId);
+    const onWorkCompleteRef    = useRef(onWorkComplete);
     useEffect(()=>{ soundRef.current=soundOn; },[soundOn]);
-    useEffect(()=>{ if (doingTasks?.[0]?.id && !linkedId) setLinkedId(doingTasks[0].id); },[doingTasks]);
+    useEffect(()=>{ linkedIdRef.current=linkedId; },[linkedId]);
+    useEffect(()=>{ onWorkCompleteRef.current=onWorkComplete; },[onWorkComplete]);
+    // Adjust linkedId during render (not in an effect) when the first doing-task changes,
+    // per React's "adjusting state when a prop changes" pattern.
+    const [prevDoingId, setPrevDoingId] = useState(doingTasks?.[0]?.id);
+    if (doingTasks?.[0]?.id !== prevDoingId) {
+        setPrevDoingId(doingTasks?.[0]?.id);
+        if (doingTasks?.[0]?.id && !linkedId) setLinkedId(doingTasks[0].id);
+    }
     useEffect(()=>{
         secsRef.current=secs;
         if (elapsedRef) elapsedRef.current = (running && modeRef.current==="work") ? Math.round((WORK_S-secs)/60) : 0;
-    },[secs,running]);
-
-    useEffect(()=>{
-        if (justDoneRef.current) {
-            justDoneRef.current = false;
-            setSecs(mode==="work" ? WORK_S : BREAK_S);
-        }
-    },[mode]);
+    },[secs,running,WORK_S,elapsedRef]);
 
     useEffect(()=>{
         if (!running) { clearInterval(intervalRef.current); return; }
@@ -3499,12 +3556,12 @@ function PomodoroWidget({ soundOn, onClose, onWorkComplete, doingTasks, allTasks
             const wasWork = modeRef.current==="work";
             const next = wasWork?"break":"work";
             modeRef.current = next;
-            justDoneRef.current = true;
             setMode(next);
-            if (wasWork) { setCycles(c=>c+1); onWorkComplete?.(WORK_S/60, linkedId); }
+            setSecs(next==="work" ? WORK_S : BREAK_S);
+            if (wasWork) { setCycles(c=>c+1); onWorkCompleteRef.current?.(WORK_S/60, linkedIdRef.current); }
         },1000);
         return ()=>clearInterval(intervalRef.current);
-    },[running]);
+    },[running,WORK_S,BREAK_S]);
 
     const logElapsed = () => {
         if (modeRef.current==="work") {
@@ -3519,8 +3576,9 @@ function PomodoroWidget({ soundOn, onClose, onWorkComplete, doingTasks, allTasks
         if (modeRef.current==="work") logElapsed();
         setRunning(false); clearInterval(intervalRef.current);
         const next = modeRef.current==="work"?"break":"work";
-        modeRef.current=next; justDoneRef.current=true;
+        modeRef.current=next;
         setMode(next);
+        setSecs(next==="work" ? WORK_S : BREAK_S);
         if (modeRef.current==="break") setCycles(c=>c+1);
     };
 
@@ -3553,7 +3611,7 @@ function PomodoroWidget({ soundOn, onClose, onWorkComplete, doingTasks, allTasks
                 <div style={{ display:"flex", gap:4, alignItems:"center" }}>
                     {cycles>0 && <span style={{ fontSize:10, color:t.textDim, padding:"2px 7px", borderRadius:20, background:t.progressBg }}>{cycles}🍅</span>}
                     <button onClick={()=>setMini(true)} title={tr("tip_minimize")} style={{ background:"none",border:"none",cursor:"pointer",color:t.textDim,fontSize:13,padding:"1px 4px",lineHeight:1 }}>—</button>
-                    <button onClick={onClose}           title="Fermer"  style={{ background:"none",border:"none",cursor:"pointer",color:t.textDim,fontSize:13,padding:"1px 4px",lineHeight:1 }}>✕</button>
+                    <button onClick={onClose}           title={tr("tip_close")}  style={{ background:"none",border:"none",cursor:"pointer",color:t.textDim,fontSize:13,padding:"1px 4px",lineHeight:1 }}>✕</button>
                 </div>
             </div>
             <div style={{ display:"flex", justifyContent:"center", marginBottom:16 }}>
@@ -3566,7 +3624,7 @@ function PomodoroWidget({ soundOn, onClose, onWorkComplete, doingTasks, allTasks
                     </svg>
                     <div style={{ position:"absolute",inset:0,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center" }}>
                         <span style={{ fontSize:23, fontWeight:800, color:t.text, fontVariantNumeric:"tabular-nums", letterSpacing:"-1px", lineHeight:1 }}>{mm}:{ss}</span>
-                        <span style={{ fontSize:9, color:t.textDim, marginTop:2 }}>{mode==="work"?"FOCUS":"PAUSE"}</span>
+                        <span style={{ fontSize:9, color:t.textDim, marginTop:2 }}>{mode==="work"?tr("focus_short"):tr("break_short")}</span>
                     </div>
                 </div>
             </div>
@@ -3596,7 +3654,7 @@ function PomodoroWidget({ soundOn, onClose, onWorkComplete, doingTasks, allTasks
 
 // ── MoviesView ────────────────────────────────────────────────────────────────
 
-function MoviesView({ movies, onAdd, onRemove, onToggleSeen, onReorder, s, t }) {
+function MoviesView({ movies, onAdd, onRemove, onToggleSeen, onReorder, onUpdate, s, t }) {
     const [text, setText] = useState("");
     const [type, setType] = useState("movie");
     const [showSeen, setShowSeen] = useState(false);
@@ -3626,9 +3684,9 @@ function MoviesView({ movies, onAdd, onRemove, onToggleSeen, onReorder, s, t }) 
                 </div>
                 <div style={{ padding:"6px 8px 10px" }}>
                     {active.length === 0
-                        ? <div style={{ textAlign:"center", color:t.textTiny, padding:"32px 0", fontSize:13 }}>{tr("no_movies")}</div>
+                        ? <EmptyState t={t} padding={32} fontSize={13}>{tr("no_movies")}</EmptyState>
                         : active.map((m, i) => (
-                            <MovieRow key={m.id} movie={m} idx={i} onReorder={handleReorder} onToggleSeen={()=>onToggleSeen(m.id)} onRemove={()=>onRemove(m.id)} t={t} />
+                            <MovieRow key={m.id} movie={m} idx={i} onReorder={handleReorder} onToggleSeen={()=>onToggleSeen(m.id)} onRemove={()=>onRemove(m.id)} onUpdate={patch=>onUpdate(m.id,patch)} s={s} t={t} />
                         ))
                     }
                 </div>
@@ -3639,18 +3697,9 @@ function MoviesView({ movies, onAdd, onRemove, onToggleSeen, onReorder, s, t }) 
                 {showSeen && (
                     <div style={{ padding:"6px 8px" }}>
                         {seen.length === 0
-                            ? <div style={{ textAlign:"center", color:t.textTiny, padding:"24px 0", fontSize:12 }}>{tr("no_seen")}</div>
+                            ? <EmptyState t={t} padding={24} fontSize={12}>{tr("no_seen")}</EmptyState>
                             : seen.map(m => (
-                                <div key={m.id} style={{ display:"flex", alignItems:"center", gap:8, padding:"7px 10px" }}>
-                                    <span style={{ fontSize:13, opacity:0.5 }}>{m.type==="series"?"📺":"🎬"}</span>
-                                    <span style={{ flex:1, fontSize:13, color:t.textDim, textDecoration:"line-through" }}>{m.title}</span>
-                                    <button title={tr("mark_unseen_tip")} onClick={()=>onToggleSeen(m.id)}
-                                            style={{ background:"none", border:"none", cursor:"pointer", fontSize:12, color:t.textSub, padding:"1px 4px", opacity:0.5 }}
-                                            onMouseEnter={e=>e.currentTarget.style.opacity="1"} onMouseLeave={e=>e.currentTarget.style.opacity="0.5"}>↺</button>
-                                    <button onClick={()=>onRemove(m.id)}
-                                            style={{ background:"none", border:"none", cursor:"pointer", fontSize:12, color:t.delColor, padding:"1px 4px", opacity:0.35 }}
-                                            onMouseEnter={e=>e.currentTarget.style.opacity="1"} onMouseLeave={e=>e.currentTarget.style.opacity="0.35"}>✕</button>
-                                </div>
+                                <SeenMovieRow key={m.id} movie={m} onToggleSeen={()=>onToggleSeen(m.id)} onRemove={()=>onRemove(m.id)} onUpdate={patch=>onUpdate(m.id,patch)} s={s} t={t} />
                             ))
                         }
                     </div>
@@ -3660,23 +3709,74 @@ function MoviesView({ movies, onAdd, onRemove, onToggleSeen, onReorder, s, t }) 
     );
 }
 
-function MovieRow({ movie, idx, onReorder, onToggleSeen, onRemove, t }) {
-    const [dragOver, setDragOver] = useState(false);
+function StarRating({ value=0, onChange, size=13 }) {
     return (
-        <div draggable
-             onDragStart={e => e.dataTransfer.setData("text/plain", String(idx))}
-             onDragOver={e => { e.preventDefault(); setDragOver(true); }}
-             onDragLeave={() => setDragOver(false)}
-             onDrop={e => { e.preventDefault(); setDragOver(false); const from = +e.dataTransfer.getData("text/plain"); if (from !== idx) onReorder(from, idx); }}
+        <span style={{ display:"inline-flex", gap:1, flexShrink:0 }}>
+            {[1,2,3,4,5].map(n => (
+                <span key={n} onClick={e=>{ e.stopPropagation(); onChange(n===value?0:n); }}
+                      style={{ cursor:"pointer", fontSize:size, lineHeight:1, color:n<=value?"#fbbf24":"rgba(148,163,184,0.3)" }}>★</span>
+            ))}
+        </span>
+    );
+}
+
+function MovieRow({ movie, idx, onReorder, onToggleSeen, onRemove, onUpdate, s, t }) {
+    const { dragOver, dragProps } = useDragReorder(idx, onReorder);
+    const [showNote, setShowNote] = useState(false);
+    const [noteText, setNoteText] = useState(movie.note || "");
+    return (
+        <div {...dragProps}
              className="fu"
-             style={{ display:"flex", alignItems:"center", gap:10, padding:"8px 10px", borderRadius:10, marginBottom:4, background:t.habitBg, border:`1px solid ${dragOver?"rgba(139,92,246,0.5)":t.cardBdr}`, outline:dragOver?"2px dashed rgba(139,92,246,0.35)":"none" }}>
-            <span style={{ cursor:"grab", color:t.textTiny, fontSize:13, flexShrink:0, userSelect:"none" }}>⠿</span>
-            <Checkbox done={false} color="#fb7185" t={t} onToggle={onToggleSeen} />
-            <span style={{ fontSize:14, flexShrink:0 }}>{movie.type==="series"?"📺":"🎬"}</span>
-            <span style={{ flex:1, minWidth:0, fontSize:13, color:t.text, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{movie.title}</span>
-            <button onClick={onRemove}
-                    style={{ background:"none", border:"none", cursor:"pointer", fontSize:12, color:t.delColor, padding:"1px 4px", opacity:0.35 }}
-                    onMouseEnter={e=>e.currentTarget.style.opacity="1"} onMouseLeave={e=>e.currentTarget.style.opacity="0.35"}>✕</button>
+             style={{ borderRadius:10, marginBottom:4, background:t.habitBg, border:`1px solid ${dragOver?"rgba(139,92,246,0.5)":t.cardBdr}`, outline:dragOver?"2px dashed rgba(139,92,246,0.35)":"none" }}>
+            <div style={{ display:"flex", alignItems:"center", gap:10, padding:"8px 10px" }}>
+                <span style={{ cursor:"grab", color:t.textTiny, fontSize:13, flexShrink:0, userSelect:"none" }}>⠿</span>
+                <Checkbox done={false} color="#fb7185" t={t} onToggle={onToggleSeen} />
+                <span style={{ fontSize:14, flexShrink:0 }}>{movie.type==="series"?"📺":"🎬"}</span>
+                <span style={{ flex:1, minWidth:0, fontSize:13, color:t.text, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{movie.title}</span>
+                <button title={tr("movie_note_tip")} onClick={()=>setShowNote(v=>!v)}
+                        style={{ background:"none", border:"none", cursor:"pointer", fontSize:12, opacity:(movie.note||showNote)?0.9:0.25, color:showNote?"#f97316":t.textSub, padding:"1px 3px", flexShrink:0 }}>📝</button>
+                <button onClick={onRemove}
+                        style={{ background:"none", border:"none", cursor:"pointer", fontSize:12, color:t.delColor, padding:"1px 4px", opacity:0.35 }}
+                        onMouseEnter={e=>e.currentTarget.style.opacity="1"} onMouseLeave={e=>e.currentTarget.style.opacity="0.35"}>✕</button>
+            </div>
+            {showNote && (
+                <div style={{ padding:"0 10px 8px 40px" }}>
+                    <textarea style={{ ...s.input, fontSize:12, resize:"vertical", minHeight:44, padding:"6px 9px" }}
+                              value={noteText} onChange={e=>setNoteText(e.target.value)}
+                              onBlur={()=>onUpdate({ note:noteText })}
+                              placeholder={tr("add_note_ph")} />
+                </div>
+            )}
+        </div>
+    );
+}
+
+function SeenMovieRow({ movie, onToggleSeen, onRemove, onUpdate, s, t }) {
+    const [showNote, setShowNote] = useState(false);
+    const [noteText, setNoteText] = useState(movie.note || "");
+    return (
+        <div style={{ padding:"6px 10px", borderRadius:10, marginBottom:2 }}>
+            <div style={{ display:"flex", alignItems:"center", gap:8 }}>
+                <span style={{ fontSize:13, opacity:0.5 }}>{movie.type==="series"?"📺":"🎬"}</span>
+                <span style={{ flex:1, fontSize:13, color:t.textDim, textDecoration:"line-through", minWidth:0, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{movie.title}</span>
+                <StarRating value={movie.rating||0} onChange={r=>onUpdate({ rating:r })} />
+                <button title={tr("movie_note_tip")} onClick={()=>setShowNote(v=>!v)}
+                        style={{ background:"none", border:"none", cursor:"pointer", fontSize:12, opacity:(movie.note||showNote)?0.9:0.25, color:showNote?"#f97316":t.textSub, padding:"1px 3px", flexShrink:0 }}>📝</button>
+                <button title={tr("mark_unseen_tip")} onClick={onToggleSeen}
+                        style={{ background:"none", border:"none", cursor:"pointer", fontSize:12, color:t.textSub, padding:"1px 4px", opacity:0.5 }}
+                        onMouseEnter={e=>e.currentTarget.style.opacity="1"} onMouseLeave={e=>e.currentTarget.style.opacity="0.5"}>↺</button>
+                <button onClick={onRemove}
+                        style={{ background:"none", border:"none", cursor:"pointer", fontSize:12, color:t.delColor, padding:"1px 4px", opacity:0.35 }}
+                        onMouseEnter={e=>e.currentTarget.style.opacity="1"} onMouseLeave={e=>e.currentTarget.style.opacity="0.35"}>✕</button>
+            </div>
+            {showNote && (
+                <div style={{ padding:"6px 0 2px 21px" }}>
+                    <textarea style={{ ...s.input, fontSize:12, resize:"vertical", minHeight:44, padding:"6px 9px" }}
+                              value={noteText} onChange={e=>setNoteText(e.target.value)}
+                              onBlur={()=>onUpdate({ note:noteText })}
+                              placeholder={tr("add_note_ph")} />
+                </div>
+            )}
         </div>
     );
 }
@@ -3688,7 +3788,7 @@ const RECIPE_EMOJIS = ["🍝","🥗","🍲","🥘","🍛","🍜","🥩","🐟","
 
 // ── TimelineView ──────────────────────────────────────────────────────────────
 
-function TimelineView({ goals, courseSessions, projects, dayKey, onToggleGoal, t, s }) {
+function TimelineView({ goals, courseSessions, projects, dayKey, onToggleGoal, t }) {
     const HOUR_H = 60, START_H = 7, END_H = 22, TOTAL_H = END_H - START_H;
     const timeToY   = ts => { if (!ts) return 0; const [h,m]=ts.split(":").map(Number); return ((h-START_H)+m/60)*HOUR_H; };
     const timeDiffM = (a,b) => { const [ah,am]=a.split(":").map(Number), [bh,bm]=b.split(":").map(Number); return (bh*60+bm)-(ah*60+am); };
@@ -3780,7 +3880,7 @@ function TimelineView({ goals, courseSessions, projects, dayKey, onToggleGoal, t
                 </div>
             )}
             {scheduled.length===0&&unscheduled.length===0&&courseSessions.length===0&&(
-                <div style={{ textAlign:"center", color:t.textTiny, padding:"40px 0", fontSize:13 }}>{tr("no_tasks_timeline")}</div>
+                <EmptyState t={t} padding={40} fontSize={13}>{tr("no_tasks_timeline")}</EmptyState>
             )}
         </div>
     );
@@ -3788,7 +3888,7 @@ function TimelineView({ goals, courseSessions, projects, dayKey, onToggleGoal, t
 
 // ── ChecklistAddItem ──────────────────────────────────────────────────────────
 
-function ChecklistAddItem({ examId, checklist, onUpdateExam, t, s }) {
+function ChecklistAddItem({ examId, checklist, onUpdateExam, s }) {
     const [text, setText] = useState("");
     return (
         <input
@@ -3908,7 +4008,7 @@ function CoursesView({ courses, courseProgress, exams, onAddCourse, onUpdateCour
                                         <div style={{ fontSize:10, color:t.textDim }}>{new Date(exam.date+"T12:00:00").toLocaleDateString(_LANG==="fr"?"fr-FR":"en-US",{day:"2-digit",month:"short"})}{exam.time&&` · ${exam.time}`}</div>
                                         {(exam.checklist||[]).length>0 && (
                                             <div style={{ fontSize:9, color:t.textDim, marginTop:2 }}>
-                                                {exam.checklist.filter(i=>i.done).length}/{exam.checklist.length} étapes
+                                                {exam.checklist.filter(i=>i.done).length}/{exam.checklist.length} {tr("steps_lbl").toLowerCase()}
                                             </div>
                                         )}
                                     </div>
@@ -4055,7 +4155,7 @@ function CoursesView({ courses, courseProgress, exams, onAddCourse, onUpdateCour
                                                                     onMouseEnter={e=>e.currentTarget.style.opacity="1"} onMouseLeave={e=>e.currentTarget.style.opacity="0.35"}>✕</button>
                                                         </div>
                                                     ))}
-                                                    <ChecklistAddItem examId={exam.id} checklist={checklist} onUpdateExam={onUpdateExam} t={t} s={s}/>
+                                                    <ChecklistAddItem examId={exam.id} checklist={checklist} onUpdateExam={onUpdateExam} s={s}/>
                                                 </div>
                                             </div>
                                         );
@@ -4146,7 +4246,7 @@ function CoursesView({ courses, courseProgress, exams, onAddCourse, onUpdateCour
                             </div>
                             <div style={{ display:"flex",gap:8 }}>
                                 <div style={{ flex:2 }}><div style={{ fontSize:11,color:t.textDim,marginBottom:4 }}>{tr("date_lbl")}</div><input type="date" value={eDate} onChange={e=>setEDate(e.target.value)} style={s.input}/></div>
-                                <div style={{ flex:1 }}><div style={{ fontSize:11,color:t.textDim,marginBottom:4 }}>Heure</div><input type="time" value={eTime} onChange={e=>setETime(e.target.value)} style={s.input}/></div>
+                                <div style={{ flex:1 }}><div style={{ fontSize:11,color:t.textDim,marginBottom:4 }}>{tr("time_field")}</div><input type="time" value={eTime} onChange={e=>setETime(e.target.value)} style={s.input}/></div>
                             </div>
                             <input value={eLoc} onChange={e=>setELoc(e.target.value)} style={s.input} placeholder={tr("location_ph")}/>
                             <textarea value={eNote} onChange={e=>setENote(e.target.value)} style={{ ...s.input,resize:"vertical",minHeight:55 }} placeholder={tr("note_ph")}/>
@@ -4239,7 +4339,7 @@ function ProjectsView({ projects, data, onAddProject, onUpdateProject, onDeleteP
                                 )}
                                 <div style={{ display:"flex",alignItems:"center",gap:8,marginBottom:8 }}>
                                     <div style={{ flex:1,height:6,borderRadius:3,background:t.progressBg,overflow:"hidden" }}><div className="pb" style={{ height:"100%",width:`${p}%`,background:proj.color,borderRadius:3 }}/></div>
-                                    <span style={{ fontSize:11,color:t.textDim,whiteSpace:"nowrap" }}>{done}/{tasks.length} tâches</span>
+                                    <span style={{ fontSize:11,color:t.textDim,whiteSpace:"nowrap" }}>{done}/{tasks.length} {tasks.length!==1?tr("proj_tasks"):tr("proj_task")}</span>
                                 </div>
                                 <button onClick={()=>setSelId(isExp?null:proj.id)} style={{ width:"100%",padding:"5px",borderRadius:8,border:`1px solid ${t.cardBdr}`,background:"transparent",color:t.textDim,fontSize:11,cursor:"pointer" }}>
                                     {isExp?tr("proj_hide"):`${tr("proj_show")} ${tasks.length} ${tasks.length!==1?tr("proj_tasks"):tr("proj_task")}`}
@@ -4287,7 +4387,7 @@ function ProjectsView({ projects, data, onAddProject, onUpdateProject, onDeleteP
                                 <input value={pEmoji} onChange={e=>setPEmoji(e.target.value)} style={{ ...s.input,width:56,textAlign:"center",fontSize:18,padding:"8px" }}/>
                                 <input value={pName} onChange={e=>setPName(e.target.value)} style={{ ...s.input,flex:1 }} placeholder={tr("proj_name_ph")} autoFocus/>
                             </div>
-                            <div><div style={{ fontSize:11,color:t.textDim,marginBottom:6 }}>Couleur</div><div style={{ display:"flex",gap:5,flexWrap:"wrap" }}>{COURSE_COLORS.map(col=><button key={col} onClick={()=>setPColor(col)} style={{ width:22,height:22,borderRadius:"50%",background:col,border:`3px solid ${pColor===col?"white":"transparent"}`,cursor:"pointer" }}/>)}</div></div>
+                            <div><div style={{ fontSize:11,color:t.textDim,marginBottom:6 }}>{tr("color_lbl")}</div><div style={{ display:"flex",gap:5,flexWrap:"wrap" }}>{COURSE_COLORS.map(col=><button key={col} onClick={()=>setPColor(col)} style={{ width:22,height:22,borderRadius:"50%",background:col,border:`3px solid ${pColor===col?"white":"transparent"}`,cursor:"pointer" }}/>)}</div></div>
                             <div><div style={{ fontSize:11,color:t.textDim,marginBottom:4 }}>{tr("deadline_opt")}</div><input type="date" value={pDeadline} onChange={e=>setPDL(e.target.value)} style={s.input}/></div>
                             <textarea value={pDesc} onChange={e=>setPDesc(e.target.value)} style={{ ...s.input,resize:"vertical",minHeight:55 }} placeholder={tr("desc_ph")}/>
                         </div>
@@ -4302,7 +4402,7 @@ function ProjectsView({ projects, data, onAddProject, onUpdateProject, onDeleteP
     );
 }
 
-function RecipesView({ recipes, meals, onAdd, onUpdate, onDelete, onAddMeal, onRemoveMeal, s, t }) {
+function RecipesView({ recipes, meals, onAdd, onUpdate, onDelete, onAddMeal, s, t }) {
     const [query, setQuery]       = useState("");
     const [showForm, setShowForm] = useState(false);
     const [editId, setEditId]     = useState(null);
@@ -4361,7 +4461,7 @@ function RecipesView({ recipes, meals, onAdd, onUpdate, onDelete, onAddMeal, onR
 
             {/* Recipe cards */}
             {filtered.length === 0
-                ? <div style={{ textAlign:"center", color:t.textTiny, padding:"40px 0", fontSize:13 }}>{q?tr("no_recipe_found"):tr("no_recipes")}</div>
+                ? <EmptyState t={t} padding={40} fontSize={13}>{q?tr("no_recipe_found"):tr("no_recipes")}</EmptyState>
                 : filtered.map(r => {
                     const isOpen = !!expanded[r.id];
                     const isPlanning = planning === r.id;
@@ -4378,7 +4478,7 @@ function RecipesView({ recipes, meals, onAdd, onUpdate, onDelete, onAddMeal, onR
                                     </div>
                                 </div>
                                 <div style={{ display:"flex", gap:6, alignItems:"center" }}>
-                                    <button onClick={e=>{e.stopPropagation();setPlanning(isPlanning?null:r.id);}} title="Planifier"
+                                    <button onClick={e=>{e.stopPropagation();setPlanning(isPlanning?null:r.id);}} title={tr("plan_btn")}
                                             style={{ padding:"5px 11px", borderRadius:8, border:`1px solid ${isPlanning?"rgba(249,115,22,0.5)":t.inpBdr}`, background:isPlanning?"rgba(249,115,22,0.12)":"transparent", color:isPlanning?col:t.textSub, fontSize:12, cursor:"pointer", fontWeight:600 }}>
                                         📅
                                     </button>
@@ -4455,7 +4555,7 @@ function RecipesView({ recipes, meals, onAdd, onUpdate, onDelete, onAddMeal, onR
                             </div>
                             <div style={{ display:"flex", alignItems:"center", gap:8 }}>
                                 <span style={{ fontSize:11, color:t.textDim, whiteSpace:"nowrap" }}>{tr("or_enter")}</span>
-                                <input value={form.emoji} onChange={e=>setForm(f=>({...f,emoji:e.target.value}))} placeholder="Colle un emoji…" style={{ ...s.input, width:90, fontSize:20, textAlign:"center", padding:"4px 8px" }} />
+                                <input value={form.emoji} onChange={e=>setForm(f=>({...f,emoji:e.target.value}))} placeholder={tr("emoji_paste_ph")} style={{ ...s.input, width:90, fontSize:20, textAlign:"center", padding:"4px 8px" }} />
                                 <span style={{ fontSize:24 }}>{form.emoji}</span>
                             </div>
                         </div>
@@ -4512,7 +4612,7 @@ function RecipesView({ recipes, meals, onAdd, onUpdate, onDelete, onAddMeal, onR
                         <div style={{ display:"flex", gap:10, justifyContent:"flex-end" }}>
                             <button onClick={()=>{setShowForm(false);setEditId(null);}} style={{ padding:"9px 20px", borderRadius:10, border:`1px solid ${t.inpBdr}`, background:"transparent", color:t.textSub, fontSize:13, cursor:"pointer" }}>{tr("cancel")}</button>
                             <button onClick={handleSave} style={{ padding:"9px 24px", borderRadius:10, border:"1px solid rgba(249,115,22,0.4)", background:"rgba(249,115,22,0.15)", color:col, fontSize:13, fontWeight:700, cursor:"pointer" }}>
-                                {editId?"Enregistrer":"Créer la recette"}
+                                {editId?tr("save_lbl"):tr("create_recipe")}
                             </button>
                         </div>
                     </div>
@@ -4630,6 +4730,13 @@ const BUDGET_I18N = {
         owed_to_maman:"Maman underpaid → reimburse her", owed_to_papa:"Papa underpaid → reimburse him",
         projection_lbl:"months remaining at current rate",
         already_reimbursed:"already reimbursed", net_owed:"net owed",
+        since_month:"Since (month)", monthly_amount_ph:"Monthly amount", amount_ph:"0.00",
+        contrib_note_ph:"Housing budget, fall semester…", expense_desc_ph:"Rent, registration, groceries…",
+        maman_share_lbl:"Maman's share",
+        csv_type:"Type", csv_date:"Date", csv_desc_note:"Description/Note", csv_category:"Category",
+        csv_payer_from:"Payer/From", csv_amount_entered:"Amount entered", csv_currency_entered:"Currency entered",
+        csv_amount_in:"Amount", csv_shared:"Shared", csv_split_maman:"Maman split %", csv_excl_balance:"Excluded from balance",
+        contribution_lbl:"Contribution", expense_lbl:"Expense", yes_lbl:"Yes", no_lbl:"No",
     },
     fr:{
         tab_overview:"📅 Par mois", tab_expenses:"📋 Dépenses", tab_contribs:"💸 Contributions", tab_previsionnel:"🎯 Budget prévi",
@@ -4661,6 +4768,13 @@ const BUDGET_I18N = {
         owed_to_maman:"Papa a sous-payé → tu rembourses à Maman", owed_to_papa:"Maman a sous-payé → tu rembourses à Papa",
         projection_lbl:"mois restants au rythme actuel",
         already_reimbursed:"déjà remboursé", net_owed:"reste à rembourser",
+        since_month:"Depuis (mois)", monthly_amount_ph:"Montant mensuel", amount_ph:"0,00",
+        contrib_note_ph:"Budget logement, semestre automne…", expense_desc_ph:"Loyer, inscription, courses…",
+        maman_share_lbl:"Part Maman",
+        csv_type:"Type", csv_date:"Date", csv_desc_note:"Description/Note", csv_category:"Catégorie",
+        csv_payer_from:"Payeur/De", csv_amount_entered:"Montant saisi", csv_currency_entered:"Devise saisie",
+        csv_amount_in:"Montant", csv_shared:"Partagé", csv_split_maman:"Split Maman%", csv_excl_balance:"Exclu balance",
+        contribution_lbl:"Contribution", expense_lbl:"Dépense", yes_lbl:"Oui", no_lbl:"Non",
     }
 };
 
@@ -4691,17 +4805,17 @@ function genRecurring(recurring) {
     return result;
 }
 
-function exportBudgetCSV(filteredExp, allContribs, toD, DCUR) {
-    const rows = [["Type","Date","Description/Note","Catégorie","Payeur/De","Montant saisi","Devise saisie",`Montant (${DCUR})`,"Partagé","Split Maman%","Exclu balance"]];
+function exportBudgetCSV(filteredExp, allContribs, toD, DCUR, bt) {
+    const rows = [[bt("csv_type"),bt("csv_date"),bt("csv_desc_note"),bt("csv_category"),bt("csv_payer_from"),bt("csv_amount_entered"),bt("csv_currency_entered"),`${bt("csv_amount_in")} (${DCUR})`,bt("csv_shared"),bt("csv_split_maman"),bt("csv_excl_balance")]];
     [...allContribs].sort((a,b)=>a.date.localeCompare(b.date)).forEach(c => {
         const fromLabel = c.from==="maman"?"Maman":c.from==="moi"?"Moi":c.from==="papa"?"Papa":c.from;
-        rows.push(["Contribution",c.date,c.note||"","",fromLabel,c.amount,c.inputCurrency,toD(c.amount,c.inputCurrency).toFixed(2),"","",""]);
+        rows.push([bt("contribution_lbl"),c.date,c.note||"","",fromLabel,c.amount,c.inputCurrency,toD(c.amount,c.inputCurrency).toFixed(2),"","",""]);
     });
     [...filteredExp].sort((a,b)=>a.date.localeCompare(b.date)).forEach(e => {
         const catObj = BUDGET_CATS.find(c=>c.id===e.category);
         const cat = (catObj ? (typeof _LANG!=="undefined"&&_LANG==="en" ? catObj.en : catObj.fr) : null) || e.category;
         const payer = e.paidBy==="maman"?"Maman":e.paidBy==="papa"?"Papa":"Moi";
-        rows.push(["Dépense",e.date,e.description||"",cat,payer,e.amount,e.inputCurrency,toD(e.amount,e.inputCurrency).toFixed(2),e.isShared?"Oui":"Non",e.isShared?(e.splitMaman??50):"",e.isShared&&e.excludeFromBalance?"Oui":""]);
+        rows.push([bt("expense_lbl"),e.date,e.description||"",cat,payer,e.amount,e.inputCurrency,toD(e.amount,e.inputCurrency).toFixed(2),e.isShared?bt("yes_lbl"):bt("no_lbl"),e.isShared?(e.splitMaman??50):"",e.isShared&&e.excludeFromBalance?bt("yes_lbl"):""]);
     });
     const csv = rows.map(r=>r.map(v=>`"${String(v).replace(/"/g,'""')}"`).join(",")).join("\n");
     const blob = new Blob(["﻿"+csv],{type:"text/csv;charset=utf-8;"});
@@ -4892,14 +5006,14 @@ function BudgetView({ expenses, contributions, reimbursements, settings, onAddEx
                 </div>
                 <select value={semester} onChange={e=>setSemester(e.target.value)}
                         style={{ ...s.sel, fontSize:11, padding:"5px 10px" }}>
-                    <option value="all">Toute la période</option>
+                    <option value="all">{bt("sem_all")}</option>
                     {semesters.map(sem=><option key={sem.id} value={sem.id}>{sem.label}</option>)}
                 </select>
-                <button onClick={()=>exportBudgetCSV(filteredExpenses, filteredContribs, toD, DCUR)}
+                <button onClick={()=>exportBudgetCSV(filteredExpenses, filteredContribs, toD, DCUR, bt)}
                         style={{ padding:"7px 12px", borderRadius:10, border:`1px solid ${t.inpBdr}`, background:"transparent", color:t.textSub, fontSize:11, cursor:"pointer", fontWeight:600, whiteSpace:"nowrap" }}>
                     📥 Export CSV
                 </button>
-                <div style={{ marginLeft:"auto", fontSize:11, color:t.textDim }}>Affiché en <strong style={{color:COL}}>{DCUR}</strong></div>
+                <div style={{ marginLeft:"auto", fontSize:11, color:t.textDim }}>{bt("displayed_in")} <strong style={{color:COL}}>{DCUR}</strong></div>
             </div>
 
             {/* ── Summary cards ── */}
@@ -4965,7 +5079,7 @@ function BudgetView({ expenses, contributions, reimbursements, settings, onAddEx
                     <span style={{ fontSize:22, flexShrink:0 }}>{remaining < 0 ? "🚨" : "⚠️"}</span>
                     <div style={{ flex:1 }}>
                         <div style={{ fontSize:12, fontWeight:700, color:remaining<0?"#f87171":"#f97316", marginBottom:2 }}>
-                            {remaining < 0 ? "Budget dépassé !" : "Solde bas"}
+                            {remaining < 0 ? bt("budget_exceeded") : bt("low_balance")}
                         </div>
                         <div style={{ fontSize:11, color:t.textSub }}>
                             {remaining < 0
@@ -4999,7 +5113,7 @@ function BudgetView({ expenses, contributions, reimbursements, settings, onAddEx
                 });
                 return (
                     <div style={{ ...s.card, padding:"14px 18px" }}>
-                        <div style={{ fontSize:12, fontWeight:700, color:t.text, marginBottom:12 }}>Répartition par catégorie</div>
+                        <div style={{ fontSize:12, fontWeight:700, color:t.text, marginBottom:12 }}>{bt("category_breakdown")}</div>
                         <div style={{ display:"flex", gap:20, alignItems:"center", flexWrap:"wrap" }}>
                             <svg width={SIZE} height={SIZE} viewBox={`0 0 ${SIZE} ${SIZE}`} style={{ flexShrink:0 }}>
                                 {slices.map(sl => sl.deg > 0.5 && (
@@ -5102,7 +5216,7 @@ function BudgetView({ expenses, contributions, reimbursements, settings, onAddEx
             {/* ── Tab: Par mois ── */}
             {viewTab==="overview" && (
                 <div style={{ display:"grid", gap:8 }}>
-                    {months.length===0 && <div style={{ textAlign:"center", color:t.textTiny, padding:"28px 0", fontSize:13 }}>Aucune donnée pour cette période</div>}
+                    {months.length===0 && <EmptyState t={t} padding={28} fontSize={13}>{bt("no_data")}</EmptyState>}
                     {months.map(mk => {
                         const { expenses:mExp, contribs:mCon } = monthMap[mk];
                         const mTotal = mExp.reduce((s,e)=>s+toD(e.amount,e.inputCurrency),0);
@@ -5158,30 +5272,30 @@ function BudgetView({ expenses, contributions, reimbursements, settings, onAddEx
                 <div style={{ display:"grid", gap:10 }}>
                     <div style={{ display:"flex", alignItems:"center", gap:8, flexWrap:"wrap" }}>
                         <select value={filterCat} onChange={e=>setFilterCat(e.target.value)} style={{ ...s.sel, fontSize:11, padding:"4px 8px" }}>
-                            <option value="all">Toutes catégories</option>
+                            <option value="all">{bt("all_categories")}</option>
                             {BUDGET_CATS.map(c=><option key={c.id} value={c.id}>{c.icon} {catLabel(c)}</option>)}
                         </select>
                         <select value={filterPayer} onChange={e=>setFilterPayer(e.target.value)} style={{ ...s.sel, fontSize:11, padding:"4px 8px" }}>
-                            <option value="all">Tous payeurs</option>
+                            <option value="all">{bt("all_payers")}</option>
                             <option value="maman">💗 Maman</option>
                             <option value="papa">💙 Papa</option>
                             <option value="moi">🙋 Moi</option>
                         </select>
                         {(filterCat!=="all"||filterPayer!=="all") && (
-                            <span style={{ fontSize:12, color:t.textSub }}>Sous-total : <strong style={{color:t.text}}>{fmt(visibleExp.reduce((s,e)=>s+toD(e.amount,e.inputCurrency),0))}</strong></span>
+                            <span style={{ fontSize:12, color:t.textSub }}>{bt("sub_total")} <strong style={{color:t.text}}>{fmt(visibleExp.reduce((s,e)=>s+toD(e.amount,e.inputCurrency),0))}</strong></span>
                         )}
                         <button onClick={()=>{ if(showExpForm&&!editExp){setShowExpForm(false);}else{setEditExp(null);setShowExpForm(true);} }}
                                 style={{ padding:"5px 14px", borderRadius:8, border:`1px solid rgba(16,185,129,0.35)`, background:"rgba(16,185,129,0.08)", color:COL, fontSize:11, cursor:"pointer", fontWeight:700, whiteSpace:"nowrap", marginLeft:"auto" }}>
-                            {showExpForm&&!editExp?"✕ Fermer":"+ Dépense"}
+                            {showExpForm&&!editExp?bt("close"):bt("add_expense")}
                         </button>
                     </div>
                     {showExpForm && (
                         <ExpenseForm key={editExp?.id||"new"} initialData={editExp}
                             onSave={exp=>{ if(editExp) onUpdateExpense(editExp.id,exp); else onAddExpense({...exp,id:uid()}); setShowExpForm(false);setEditExp(null); }}
-                            onCancel={()=>{setShowExpForm(false);setEditExp(null);}} s={s} t={t} COL={COL} />
+                            onCancel={()=>{setShowExpForm(false);setEditExp(null);}} s={s} t={t} COL={COL} bt={bt} />
                     )}
                     <div style={{ display:"grid", gap:6 }}>
-                        {visibleExp.length===0 && <div style={{ textAlign:"center", color:t.textTiny, padding:"28px 0", fontSize:13 }}>Aucune dépense{filterCat!=="all"||filterPayer!=="all"?" pour ce filtre":""}</div>}
+                        {visibleExp.length===0 && <EmptyState t={t} padding={28} fontSize={13}>{filterCat!=="all"||filterPayer!=="all"?bt("no_expense_filter"):bt("no_expense")}</EmptyState>}
                         {visibleExp.map(e => {
                             const cat=BUDGET_CATS.find(c=>c.id===e.category);
                             const pc=e.paidBy==="maman"?"#f472b6":e.paidBy==="papa"?"#60a5fa":COL;
@@ -5228,19 +5342,19 @@ function BudgetView({ expenses, contributions, reimbursements, settings, onAddEx
                 <div style={{ display:"grid", gap:14 }}>
                     <div style={{ ...s.card, padding:"14px 18px" }}>
                         <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:10 }}>
-                            <div style={{ fontSize:13, fontWeight:700, color:t.text }}>🔁 Virements récurrents</div>
+                            <div style={{ fontSize:13, fontWeight:700, color:t.text }}>{bt("recurring")}</div>
                             <button onClick={()=>{ if(showRecurForm&&!editRecur){setShowRecurForm(false);}else{setEditRecur(null);setShowRecurForm(true);} }}
                                     style={{ padding:"5px 11px", borderRadius:8, border:`1px solid rgba(16,185,129,0.35)`, background:"rgba(16,185,129,0.08)", color:COL, fontSize:11, cursor:"pointer", fontWeight:700 }}>
-                                {showRecurForm&&!editRecur?"✕":"+ Configurer"}
+                                {showRecurForm&&!editRecur?"✕":bt("configure")}
                             </button>
                         </div>
                         {showRecurForm && (
                             <RecurringForm key={editRecur?.id||"new"} initialData={editRecur}
                                 onSave={r=>{ if(editRecur){ onUpdateSettings({recurringContribs:(settings.recurringContribs||[]).map(x=>x.id===editRecur.id?{...r,id:editRecur.id}:x)}); } else { onUpdateSettings({recurringContribs:[...(settings.recurringContribs||[]),{...r,id:uid()}]}); } setShowRecurForm(false); setEditRecur(null); }}
-                                onCancel={()=>{setShowRecurForm(false);setEditRecur(null);}} s={s} t={t} COL={COL}
+                                onCancel={()=>{setShowRecurForm(false);setEditRecur(null);}} s={s} t={t} COL={COL} bt={bt}
                             />
                         )}
-                        {recurringContribs.length===0&&!showRecurForm && <div style={{ fontSize:12, color:t.textTiny }}>Aucun virement récurrent — configure ici les virements mensuels de ta mère par exemple</div>}
+                        {recurringContribs.length===0&&!showRecurForm && <div style={{ fontSize:12, color:t.textTiny }}>{bt("no_recur")}</div>}
                         {recurringContribs.map(r=>(
                             <div key={r.id} style={{ display:"flex", gap:8, alignItems:"center", padding:"8px 0", borderBottom:`1px solid ${t.divider}` }}>
                                 <span style={{ fontSize:14 }}>{r.from==="maman"?"💗":"💙"}</span>
@@ -5262,15 +5376,15 @@ function BudgetView({ expenses, contributions, reimbursements, settings, onAddEx
                     </div>
                     <div>
                         <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:8 }}>
-                            <div style={{ fontSize:13, fontWeight:700, color:t.text }}>💸 Contributions ponctuelles</div>
+                            <div style={{ fontSize:13, fontWeight:700, color:t.text }}>{bt("one_time")}</div>
                             <button onClick={()=>setShowContrib(v=>!v)}
                                     style={{ padding:"5px 11px", borderRadius:8, border:`1px solid rgba(16,185,129,0.35)`, background:"rgba(16,185,129,0.08)", color:COL, fontSize:11, cursor:"pointer", fontWeight:700 }}>
-                                {showContrib?"✕":"+ Ajouter"}
+                                {showContrib?"✕":bt("add_contrib")}
                             </button>
                         </div>
-                        {showContrib && <ContribForm onSave={c=>{onAddContribution(c);setShowContrib(false);}} onCancel={()=>setShowContrib(false)} s={s} t={t} COL={COL} />}
+                        {showContrib && <ContribForm onSave={c=>{onAddContribution(c);setShowContrib(false);}} onCancel={()=>setShowContrib(false)} s={s} t={t} COL={COL} bt={bt} />}
                         <div style={{ display:"grid", gap:6 }}>
-                            {contributions.length===0&&!showContrib&&<div style={{ fontSize:12, color:t.textTiny, textAlign:"center", padding:"16px 0" }}>Aucune contribution ponctuelle</div>}
+                            {contributions.length===0&&!showContrib&&<div style={{ fontSize:12, color:t.textTiny, textAlign:"center", padding:"16px 0" }}>{bt("no_contrib")}</div>}
                             {[...contributions].sort((a,b)=>b.date.localeCompare(a.date)).map(c=>(
                                 <div key={c.id} style={{ ...s.card, padding:"10px 13px", display:"flex", gap:8, alignItems:"center" }}>
                                     <span style={{ fontSize:16, flexShrink:0 }}>{c.from==="maman"?"💗":c.from==="moi"?"🙋":"💙"}</span>
@@ -5514,7 +5628,7 @@ function FixedExpenseForm({ initialData, bt, catLabel, onSave, onCancel, s, t, C
     );
 }
 
-function RecurringForm({ initialData, onSave, onCancel, s, t, COL }) {
+function RecurringForm({ initialData, onSave, onCancel, s, t, COL, bt }) {
     const [form, setForm] = useState(initialData ? { ...initialData, amount:String(initialData.amount) } : { from:"maman", amount:"", inputCurrency:"CHF", startDate:getTodayKey().slice(0,7)+"-01", note:"" });
     const up = (k, v) => setForm(f => ({ ...f, [k]:v }));
     const handleSave = () => {
@@ -5526,36 +5640,36 @@ function RecurringForm({ initialData, onSave, onCancel, s, t, COL }) {
         <div style={{ display:"grid", gap:8, padding:"12px 0", borderTop:`1px solid ${t.divider}`, marginTop:8 }}>
             <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8 }}>
                 <div>
-                    <label style={{ fontSize:11, color:t.textSub, display:"block", marginBottom:3 }}>De</label>
+                    <label style={{ fontSize:11, color:t.textSub, display:"block", marginBottom:3 }}>{bt("from")}</label>
                     <select value={form.from} onChange={e=>up("from",e.target.value)} style={{ ...s.sel, width:"100%", fontSize:12, padding:"5px 8px" }}>
                         <option value="maman">💗 Maman</option>
                         <option value="papa">💙 Papa</option>
                     </select>
                 </div>
                 <div>
-                    <label style={{ fontSize:11, color:t.textSub, display:"block", marginBottom:3 }}>Depuis (mois)</label>
+                    <label style={{ fontSize:11, color:t.textSub, display:"block", marginBottom:3 }}>{bt("since_month")}</label>
                     <input type="month" value={form.startDate?.slice(0,7)} onChange={e=>up("startDate",e.target.value+"-01")}
                            style={{ ...s.input, width:"100%", fontSize:12, padding:"5px 8px", boxSizing:"border-box" }} />
                 </div>
             </div>
             <div style={{ display:"grid", gridTemplateColumns:"1fr auto", gap:8 }}>
                 <input type="number" min="0" step="0.01" value={form.amount} onChange={e=>up("amount",e.target.value)}
-                       placeholder="Montant mensuel" style={{ ...s.input, fontSize:12, padding:"5px 8px" }} />
+                       placeholder={bt("monthly_amount_ph")} style={{ ...s.input, fontSize:12, padding:"5px 8px" }} />
                 <select value={form.inputCurrency} onChange={e=>up("inputCurrency",e.target.value)} style={{ ...s.sel, fontSize:12, padding:"5px 8px" }}>
                     <option>CHF</option><option>EUR</option>
                 </select>
             </div>
             <input type="text" value={form.note} onChange={e=>up("note",e.target.value)}
-                   placeholder="Note (optionnelle)" style={{ ...s.input, fontSize:12, padding:"5px 8px" }} />
+                   placeholder={bt("note_opt")} style={{ ...s.input, fontSize:12, padding:"5px 8px" }} />
             <div style={{ display:"flex", gap:8, justifyContent:"flex-end" }}>
-                <button onClick={onCancel} style={{ padding:"5px 12px", borderRadius:8, border:`1px solid ${t.cardBdr}`, background:"none", color:t.textSub, fontSize:11, cursor:"pointer" }}>Annuler</button>
-                <button onClick={handleSave} style={{ padding:"5px 14px", borderRadius:8, border:"none", background:COL, color:"#0f1117", fontSize:11, cursor:"pointer", fontWeight:700 }}>{initialData?"Modifier":"Enregistrer"}</button>
+                <button onClick={onCancel} style={{ padding:"5px 12px", borderRadius:8, border:`1px solid ${t.cardBdr}`, background:"none", color:t.textSub, fontSize:11, cursor:"pointer" }}>{bt("cancel")}</button>
+                <button onClick={handleSave} style={{ padding:"5px 14px", borderRadius:8, border:"none", background:COL, color:"#0f1117", fontSize:11, cursor:"pointer", fontWeight:700 }}>{initialData?bt("modify"):bt("save")}</button>
             </div>
         </div>
     );
 }
 
-function ContribForm({ onSave, onCancel, s, t, COL }) {
+function ContribForm({ onSave, onCancel, s, t, COL, bt }) {
     const [form, setForm] = useState({ from:"papa", type:"somme", amount:"", inputCurrency:"CHF", date:getTodayKey(), note:"" });
     const up = (k, v) => setForm(f => ({ ...f, [k]:v }));
     const handleSave = () => {
@@ -5567,56 +5681,56 @@ function ContribForm({ onSave, onCancel, s, t, COL }) {
         <div style={{ ...s.card, padding:"14px", display:"grid", gap:10, border:`1px solid rgba(16,185,129,0.2)` }}>
             <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8 }}>
                 <div>
-                    <div style={{ fontSize:10, color:t.textSub, marginBottom:3 }}>De</div>
+                    <div style={{ fontSize:10, color:t.textSub, marginBottom:3 }}>{bt("from")}</div>
                     <select value={form.from} onChange={e=>up("from",e.target.value)} style={{ ...s.sel, width:"100%" }}>
                         <option value="papa">💙 Papa</option>
                         <option value="maman">💗 Maman</option>
-                        <option value="moi">🙋 Moi (revenu)</option>
+                        <option value="moi">🙋 Moi ({bt("income").split(" / ")[0]})</option>
                     </select>
                 </div>
                 <div>
-                    <div style={{ fontSize:10, color:t.textSub, marginBottom:3 }}>Type</div>
+                    <div style={{ fontSize:10, color:t.textSub, marginBottom:3 }}>{bt("type")}</div>
                     <select value={form.type} onChange={e=>up("type",e.target.value)} style={{ ...s.sel, width:"100%" }}>
-                        <option value="somme">Somme globale</option>
-                        <option value="virement">Virement mensuel</option>
-                        {form.from==="moi" && <option value="revenu">Revenu / salaire</option>}
+                        <option value="somme">{bt("lump")}</option>
+                        <option value="virement">{bt("transfer")}</option>
+                        {form.from==="moi" && <option value="revenu">{bt("income")}</option>}
                     </select>
                 </div>
             </div>
             <div style={{ display:"grid", gridTemplateColumns:"1fr 80px 1fr", gap:8 }}>
                 <div>
-                    <div style={{ fontSize:10, color:t.textSub, marginBottom:3 }}>Montant *</div>
+                    <div style={{ fontSize:10, color:t.textSub, marginBottom:3 }}>{bt("amount")}</div>
                     <input autoFocus type="number" min="0" step="0.01" value={form.amount} onChange={e=>up("amount",e.target.value)}
                            onKeyDown={e=>{ if(e.key==="Enter") handleSave(); if(e.key==="Escape") onCancel(); }}
-                           placeholder="0,00" style={{ ...s.input, width:"100%" }} />
+                           placeholder={bt("amount_ph")} style={{ ...s.input, width:"100%" }} />
                 </div>
                 <div>
-                    <div style={{ fontSize:10, color:t.textSub, marginBottom:3 }}>Devise</div>
+                    <div style={{ fontSize:10, color:t.textSub, marginBottom:3 }}>{bt("currency")}</div>
                     <select value={form.inputCurrency} onChange={e=>up("inputCurrency",e.target.value)} style={{ ...s.sel, width:"100%" }}>
                         <option value="CHF">CHF</option>
                         <option value="EUR">EUR</option>
                     </select>
                 </div>
                 <div>
-                    <div style={{ fontSize:10, color:t.textSub, marginBottom:3 }}>Date</div>
+                    <div style={{ fontSize:10, color:t.textSub, marginBottom:3 }}>{bt("date")}</div>
                     <input type="date" value={form.date} onChange={e=>up("date",e.target.value)} style={{ ...s.input, width:"100%" }} />
                 </div>
             </div>
             <div>
-                <div style={{ fontSize:10, color:t.textSub, marginBottom:3 }}>Note (optionnel)</div>
+                <div style={{ fontSize:10, color:t.textSub, marginBottom:3 }}>{bt("note_opt")}</div>
                 <input value={form.note} onChange={e=>up("note",e.target.value)}
                        onKeyDown={e=>{ if(e.key==="Enter") handleSave(); if(e.key==="Escape") onCancel(); }}
-                       placeholder="Budget logement, semestre automne…" style={{ ...s.input, width:"100%" }} />
+                       placeholder={bt("contrib_note_ph")} style={{ ...s.input, width:"100%" }} />
             </div>
             <div style={{ display:"flex", gap:8, justifyContent:"flex-end" }}>
-                <button onClick={onCancel} style={{ padding:"7px 14px", borderRadius:8, border:`1px solid ${t.inpBdr}`, background:"transparent", color:t.textSub, fontSize:12, cursor:"pointer" }}>Annuler</button>
-                <button onClick={handleSave} style={{ padding:"7px 18px", borderRadius:8, border:`1px solid rgba(16,185,129,0.4)`, background:"rgba(16,185,129,0.12)", color:COL, fontSize:12, fontWeight:700, cursor:"pointer" }}>Enregistrer</button>
+                <button onClick={onCancel} style={{ padding:"7px 14px", borderRadius:8, border:`1px solid ${t.inpBdr}`, background:"transparent", color:t.textSub, fontSize:12, cursor:"pointer" }}>{bt("cancel")}</button>
+                <button onClick={handleSave} style={{ padding:"7px 18px", borderRadius:8, border:`1px solid rgba(16,185,129,0.4)`, background:"rgba(16,185,129,0.12)", color:COL, fontSize:12, fontWeight:700, cursor:"pointer" }}>{bt("save")}</button>
             </div>
         </div>
     );
 }
 
-function ExpenseForm({ initialData, onSave, onCancel, s, t, COL }) {
+function ExpenseForm({ initialData, onSave, onCancel, s, t, COL, bt }) {
     const catLabel = c => c ? (typeof _LANG!=="undefined"&&_LANG==="en" ? c.en : c.fr) : "";
     const empty = { description:"", date:getTodayKey(), amount:"", inputCurrency:"CHF", category:"bouffe", paidBy:"maman", isShared:false, splitMaman:50, excludeFromBalance:false, note:"" };
     const [form, setForm] = useState(initialData ? { ...initialData, amount:String(initialData.amount) } : empty);
@@ -5629,30 +5743,30 @@ function ExpenseForm({ initialData, onSave, onCancel, s, t, COL }) {
     return (
         <div style={{ ...s.card, padding:"16px", display:"grid", gap:12, border:`1px solid rgba(16,185,129,0.2)` }}>
             <div>
-                <div style={{ fontSize:10, color:t.textSub, marginBottom:3 }}>Description *</div>
+                <div style={{ fontSize:10, color:t.textSub, marginBottom:3 }}>{bt("description")}</div>
                 <input autoFocus value={form.description} onChange={e=>up("description",e.target.value)}
                        onKeyDown={e=>{ if(e.key==="Enter") handleSave(); if(e.key==="Escape") onCancel(); }}
-                       placeholder="Loyer, inscription, courses…" style={{ ...s.input, width:"100%" }} />
+                       placeholder={bt("expense_desc_ph")} style={{ ...s.input, width:"100%" }} />
             </div>
             <div style={{ display:"grid", gridTemplateColumns:"1fr 80px 1fr 1fr", gap:8 }}>
                 <div>
-                    <div style={{ fontSize:10, color:t.textSub, marginBottom:3 }}>Montant *</div>
+                    <div style={{ fontSize:10, color:t.textSub, marginBottom:3 }}>{bt("amount")}</div>
                     <input type="number" min="0" step="0.01" value={form.amount} onChange={e=>up("amount",e.target.value)}
-                           placeholder="0,00" style={{ ...s.input, width:"100%" }} />
+                           placeholder={bt("amount_ph")} style={{ ...s.input, width:"100%" }} />
                 </div>
                 <div>
-                    <div style={{ fontSize:10, color:t.textSub, marginBottom:3 }}>Devise</div>
+                    <div style={{ fontSize:10, color:t.textSub, marginBottom:3 }}>{bt("currency")}</div>
                     <select value={form.inputCurrency} onChange={e=>up("inputCurrency",e.target.value)} style={{ ...s.sel, width:"100%" }}>
                         <option value="CHF">CHF</option>
                         <option value="EUR">EUR</option>
                     </select>
                 </div>
                 <div>
-                    <div style={{ fontSize:10, color:t.textSub, marginBottom:3 }}>Date</div>
+                    <div style={{ fontSize:10, color:t.textSub, marginBottom:3 }}>{bt("date")}</div>
                     <input type="date" value={form.date} onChange={e=>up("date",e.target.value)} style={{ ...s.input, width:"100%" }} />
                 </div>
                 <div>
-                    <div style={{ fontSize:10, color:t.textSub, marginBottom:3 }}>Payé par</div>
+                    <div style={{ fontSize:10, color:t.textSub, marginBottom:3 }}>{bt("paid_by")}</div>
                     <select value={form.paidBy} onChange={e=>up("paidBy",e.target.value)} style={{ ...s.sel, width:"100%" }}>
                         <option value="maman">💗 Maman</option>
                         <option value="papa">💙 Papa</option>
@@ -5661,7 +5775,7 @@ function ExpenseForm({ initialData, onSave, onCancel, s, t, COL }) {
                 </div>
             </div>
             <div>
-                <div style={{ fontSize:10, color:t.textSub, marginBottom:6 }}>Catégorie</div>
+                <div style={{ fontSize:10, color:t.textSub, marginBottom:6 }}>{bt("category")}</div>
                 <div style={{ display:"flex", gap:6, flexWrap:"wrap" }}>
                     {BUDGET_CATS.map(c => (
                         <button key={c.id} onClick={()=>up("category",c.id)}
@@ -5675,12 +5789,12 @@ function ExpenseForm({ initialData, onSave, onCancel, s, t, COL }) {
                 <label style={{ display:"flex", alignItems:"center", gap:6, cursor:"pointer", fontSize:12, color:t.textSub, userSelect:"none" }}>
                     <input type="checkbox" checked={form.isShared} onChange={e=>up("isShared",e.target.checked)}
                            style={{ accentColor:COL, width:14, height:14 }} />
-                    Dépense partagée (les deux auraient dû payer)
+                    {bt("shared")}
                 </label>
                 {form.isShared && (
                     <>
                         <div style={{ display:"flex", alignItems:"center", gap:6, fontSize:12, color:t.textSub }}>
-                            <span>Part Maman</span>
+                            <span>{bt("maman_share_lbl")}</span>
                             <input type="number" min="0" max="100" value={form.splitMaman}
                                    onChange={e=>up("splitMaman",Math.max(0,Math.min(100,Number(e.target.value))))}
                                    style={{ ...s.input, width:55, padding:"3px 7px", fontSize:12 }} />
@@ -5689,15 +5803,15 @@ function ExpenseForm({ initialData, onSave, onCancel, s, t, COL }) {
                         <label style={{ display:"flex", alignItems:"center", gap:6, cursor:"pointer", fontSize:12, color:t.textSub, userSelect:"none" }}>
                             <input type="checkbox" checked={form.excludeFromBalance} onChange={e=>up("excludeFromBalance",e.target.checked)}
                                    style={{ accentColor:"#f97316", width:14, height:14 }} />
-                            Exclure de la balance
+                            {bt("exclude_balance")}
                         </label>
                     </>
                 )}
             </div>
             <div style={{ display:"flex", gap:8, justifyContent:"flex-end" }}>
-                <button onClick={onCancel} style={{ padding:"7px 14px", borderRadius:8, border:`1px solid ${t.inpBdr}`, background:"transparent", color:t.textSub, fontSize:12, cursor:"pointer" }}>Annuler</button>
+                <button onClick={onCancel} style={{ padding:"7px 14px", borderRadius:8, border:`1px solid ${t.inpBdr}`, background:"transparent", color:t.textSub, fontSize:12, cursor:"pointer" }}>{bt("cancel")}</button>
                 <button onClick={handleSave} style={{ padding:"7px 20px", borderRadius:8, border:`1px solid rgba(16,185,129,0.4)`, background:"rgba(16,185,129,0.12)", color:COL, fontSize:12, fontWeight:700, cursor:"pointer" }}>
-                    {initialData ? "Modifier" : "Ajouter la dépense"}
+                    {initialData ? bt("modify") : bt("add_expense")}
                 </button>
             </div>
         </div>
@@ -5706,17 +5820,25 @@ function ExpenseForm({ initialData, onSave, onCancel, s, t, COL }) {
 
 // ── SearchOverlay ─────────────────────────────────────────────────────────────
 
-function SearchOverlay({ data, t, s, searchQ, setSearchQ, searchInputRef, onClose, onGoToDay }) {
-    const results = [];
-    if (searchQ.trim().length > 1) {
+function SearchOverlay({ data, t, s, searchQ, setSearchQ, searchInputRef, onClose, onGoToDay, onGoToMovies }) {
+    const results = useMemo(() => {
+        const q = searchQ.trim();
+        if (q.length <= 1) return [];
+        const found = [];
+        const qLower = q.toLowerCase();
         Object.entries(data.days||{}).forEach(([dk,dv]) => {
             (dv.goals||[]).forEach(g => {
-                if (g.text.toLowerCase().includes(searchQ.toLowerCase()))
-                    results.push({ type:"day", dk, goal:g });
+                if (g.text.toLowerCase().includes(qLower))
+                    found.push({ type:"day", dk, goal:g });
             });
         });
-        results.sort((a,b) => b.dk.localeCompare(a.dk));
-    }
+        found.sort((a,b) => b.dk.localeCompare(a.dk));
+        (data.movies||[]).forEach(m => {
+            if (m.title.toLowerCase().includes(qLower) || (m.note||"").toLowerCase().includes(qLower))
+                found.push({ type:"movie", movie:m });
+        });
+        return found;
+    }, [data.days, data.movies, searchQ]);
 
     return (
         <div onClick={e=>{ if(e.target===e.currentTarget) onClose(); }}
@@ -5738,6 +5860,19 @@ function SearchOverlay({ data, t, s, searchQ, setSearchQ, searchInputRef, onClos
                         <div style={{ textAlign:"center", padding:"40px", color:t.textDim, fontSize:13 }}>{tr("no_results")} « {searchQ} »</div>
                     )}
                     {results.slice(0,30).map((r,i) => {
+                        if (r.type === "movie") {
+                            const m = r.movie;
+                            return (
+                                <div key={i} className="ir"
+                                     style={{ padding:"11px 18px", borderBottom:`1px solid ${t.divider}`, cursor:"pointer", display:"flex", gap:10, alignItems:"center" }}
+                                     onClick={()=>{ onGoToMovies(); onClose(); }}>
+                                    <span style={{ fontSize:13, flexShrink:0 }}>{m.type==="series"?"📺":"🎬"}</span>
+                                    <span style={{ fontSize:13, color:m.done?t.textDim:t.text, flex:1, textDecoration:m.done?"line-through":"none" }}>{m.title}</span>
+                                    {m.rating > 0 && <StarRating value={m.rating} onChange={()=>{}} size={11} />}
+                                    <span style={{ fontSize:10, color:t.textTiny, flexShrink:0 }}>{tr("movie_type")}</span>
+                                </div>
+                            );
+                        }
                         const c = CATEGORIES.find(x=>x.id===r.goal.cat);
                         return (
                             <div key={i} className="ir"
