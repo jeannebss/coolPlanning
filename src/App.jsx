@@ -20,6 +20,7 @@ const I18N = {
         tab_day:"Day", tab_month:"Month", tab_habits:"Habits", tab_todo:"To-Do",
         tab_history:"History", tab_analytics:"Analytics", tab_recipes:"Recipes",
         tab_courses:"Courses", tab_projects:"Projects", tab_budget:"Budget",
+        tab_movies:"Movies",
         // Sidebar
         views:"Views", week_lbl:"Week", this_week:"This week", today_badge:"today",
         app_title:"🎯 My Goals",
@@ -27,10 +28,17 @@ const I18N = {
         hdr_month:"Month", hdr_habits:"Habits", hdr_history:"History",
         hdr_analytics:"Analytics", hdr_recipes:"Recipes",
         hdr_courses:"Courses & Exams", hdr_projects:"Projects",
+        hdr_movies:"Movies & Series",
         idea_sg:"idea", idea_pl:"ideas",
         subject_sg:"subject", subject_pl:"subjects",
         active_sg:"active",
         recipe_sg:"recipe", recipe_pl:"recipes",
+        // Movies & Series
+        new_movie_ph:"Movie or series title… (Enter)",
+        type_movie:"🎬 Movie", type_series:"📺 Series",
+        no_movies:"Nothing on your watchlist yet",
+        to_watch_lbl:"To watch", seen_section:"✓ Seen", no_seen:"No seen items yet",
+        mark_seen_tip:"Mark as seen", mark_unseen_tip:"Move back to watchlist",
         // Day view
         day_tasks_title:"Daily tasks",
         planned_tasks:"Planned tasks", done_lbl:"Done", remaining:"Remaining",
@@ -270,15 +278,23 @@ const I18N = {
         tab_day:"Journée", tab_month:"Mois", tab_habits:"Habitudes", tab_todo:"To-Do",
         tab_history:"Historique", tab_analytics:"Analyse", tab_recipes:"Recettes",
         tab_courses:"Cours", tab_projects:"Projets", tab_budget:"Budget",
+        tab_movies:"Films/Séries",
         views:"Vues", week_lbl:"Semaine", this_week:"Cette semaine", today_badge:"auj.",
         app_title:"🎯 Mes Objectifs",
         hdr_month:"Mois", hdr_habits:"Habitudes", hdr_history:"Historique",
         hdr_analytics:"Analyse", hdr_recipes:"Recettes",
         hdr_courses:"Cours & Examens", hdr_projects:"Projets",
+        hdr_movies:"Films & Séries",
         idea_sg:"idée", idea_pl:"idées",
         subject_sg:"matière", subject_pl:"matières",
         active_sg:"actif",
         recipe_sg:"recette", recipe_pl:"recettes",
+        // Films & Séries
+        new_movie_ph:"Titre du film ou de la série… (Entrée)",
+        type_movie:"🎬 Film", type_series:"📺 Série",
+        no_movies:"Aucun film ou série dans la liste",
+        to_watch_lbl:"À voir", seen_section:"✓ Vus", no_seen:"Aucun film/série vu pour le moment",
+        mark_seen_tip:"Marquer comme vu", mark_unseen_tip:"Remettre dans la liste",
         day_tasks_title:"Tâches du jour",
         planned_tasks:"Tâches planifiées", done_lbl:"Accomplies", remaining:"Restantes",
         light_day:"journée légère", normal_day:"journée normale",
@@ -790,7 +806,7 @@ function mkS(t) {
 
 // ── GoalItem ──────────────────────────────────────────────────────────────────
 
-function GoalItem({ goal, idx, onToggle, onRemove, onUpdate, onReorder, showPendingBadge, isWeekGoal, isDay, onAddSubtask, onToggleSubtask, onRemoveSubtask, weekGoals, onLink, projects, courses, t, s }) {
+function GoalItem({ goal, idx, onToggle, onRemove, onUpdate, onReorder, showPendingBadge, isDay, onAddSubtask, onToggleSubtask, onRemoveSubtask, projects, courses, t, s }) {
     const [editing,     setEditing]     = useState(false);
     const [editText,    setEditText]    = useState(goal.text);
     const [showNote,    setShowNote]    = useState(false);
@@ -799,19 +815,11 @@ function GoalItem({ goal, idx, onToggle, onRemove, onUpdate, onReorder, showPend
     const [showSubs,    setShowSubs]    = useState(false);
     const [subText,     setSubText]     = useState("");
     const [addingSub,   setAddingSub]   = useState(false);
-    const [showLinkDd,  setShowLinkDd]  = useState(false);
     const [showTime,    setShowTime]    = useState(false);
     const [editTime,    setEditTime]    = useState(goal.startTime || "");
     const [editDur,     setEditDur]     = useState(String(goal.duration || 30));
     const [showProj,    setShowProj]    = useState(false);
     const [showCourse,    setShowCourse]    = useState(false);
-    const linkDdRef  = useRef(null);
-    useEffect(() => {
-        if (!showLinkDd) return;
-        const h = e => { if (linkDdRef.current && !linkDdRef.current.contains(e.target)) setShowLinkDd(false); };
-        document.addEventListener("mousedown", h);
-        return () => document.removeEventListener("mousedown", h);
-    }, [showLinkDd]);
 
 
     const c = CATEGORIES.find(x => x.id === goal.cat);
@@ -870,41 +878,9 @@ function GoalItem({ goal, idx, onToggle, onRemove, onUpdate, onReorder, showPend
                 <button title="Note"
                         onClick={() => setShowNote(v => !v)}
                         style={{ background:"none", border:"none", cursor:"pointer", fontSize:12, opacity:(goal.note||showNote)?0.9:0.25, transition:"opacity 0.15s", padding:"1px 3px", color:showNote?"#f97316":t.textSub, flexShrink:0 }}>📝</button>
-                {(isWeekGoal || isDay) && (
+                {isDay && (
                     <button title={tr("tip_subtasks")} onClick={() => setShowSubs(v=>!v)}
                             style={{ background:"none", border:"none", cursor:"pointer", fontSize:14, opacity:showSubs||goal.subtasks?.length>0?0.9:0.25, color:showSubs?"#38bdf8":t.textSub, padding:"1px 3px", flexShrink:0 }}>⊕</button>
-                )}
-                {weekGoals && weekGoals.length > 0 && (
-                    <div ref={linkDdRef} style={{ position:"relative", flexShrink:0 }}>
-                        {goal.weekGoalId ? (
-                            <span title={weekGoals.find(wg=>wg.id===goal.weekGoalId)?.text||"Lié"}
-                                  onClick={() => setShowLinkDd(v=>!v)}
-                                  style={{ fontSize:10, padding:"2px 7px", borderRadius:12, background:"rgba(139,92,246,0.18)", color:"#c4b5fd", border:"1px solid rgba(139,92,246,0.4)", cursor:"pointer", userSelect:"none" }}>
-                🔗 {(weekGoals.find(wg=>wg.id===goal.weekGoalId)?.text||"").slice(0,20)}
-              </span>
-                        ) : (
-                            <button title={tr("tip_link_goal")} onClick={() => setShowLinkDd(v=>!v)}
-                                    style={{ background:"none", border:"none", cursor:"pointer", fontSize:13, opacity:0.25, color:t.textSub, padding:"1px 3px" }}>🔗</button>
-                        )}
-                        {showLinkDd && (
-                            <div style={{ position:"absolute", right:0, top:"calc(100% + 4px)", zIndex:200, background:t.glass, border:`1px solid ${t.glassBdr}`, borderRadius:10, backdropFilter:"blur(16px)", WebkitBackdropFilter:"blur(16px)", boxShadow:"0 8px 24px rgba(0,0,0,0.35)", minWidth:180, overflow:"hidden" }}>
-                                {goal.weekGoalId && (
-                                    <button onClick={() => { onLink(null); setShowLinkDd(false); }}
-                                            style={{ display:"block", width:"100%", padding:"8px 12px", background:"transparent", border:"none", cursor:"pointer", color:"#f87171", fontSize:11, textAlign:"left", borderBottom:`1px solid ${t.divider}` }}>
-                                        {tr("unlink_btn")}
-                                    </button>
-                                )}
-                                {weekGoals.map(wg => (
-                                    <button key={wg.id} onClick={() => { onLink(wg.id); setShowLinkDd(false); }}
-                                            style={{ display:"block", width:"100%", padding:"8px 12px", background:wg.id===goal.weekGoalId?"rgba(139,92,246,0.1)":"transparent", border:"none", cursor:"pointer", color:t.text, fontSize:11, textAlign:"left", borderBottom:`1px solid ${t.divider}` }}
-                                            onMouseEnter={e=>e.currentTarget.style.background="rgba(139,92,246,0.08)"}
-                                            onMouseLeave={e=>e.currentTarget.style.background=wg.id===goal.weekGoalId?"rgba(139,92,246,0.1)":"transparent"}>
-                                        {wg.text.slice(0,35)}{wg.text.length>35?"…":""}
-                                    </button>
-                                ))}
-                            </div>
-                        )}
-                    </div>
                 )}
                 {/* ⏱ Time scheduling (day tasks only) */}
                 {isDay && (
@@ -1043,7 +1019,7 @@ function GoalItem({ goal, idx, onToggle, onRemove, onUpdate, onReorder, showPend
           />
                 </div>
             )}
-            {(isWeekGoal || isDay) && showSubs && (
+            {isDay && showSubs && (
                 <div style={{ paddingLeft:44, paddingRight:10, paddingBottom:10 }}>
                     {(goal.subtasks||[]).map(sub => (
                         <div key={sub.id} style={{ display:"flex", alignItems:"center", gap:7, marginBottom:5 }}>
@@ -1101,11 +1077,9 @@ export default function App() {
     }, []);
     const [tab,         setTab]         = useState("day");
     const [selectedDay, setSelectedDay] = useState(getTodayKey());
-    const [showPresets, setShowPresets] = useState(true);
     const [showDayPre,  setShowDayPre]  = useState(true);
     const [isDark,      setIsDark]      = useState(() => localStorage.getItem("theme") !== "light");
     const [spinKey,     setSpinKey]     = useState(0);
-    const [viewWeekKey, setViewWeekKey] = useState(getWeekKey());
     const [undo,        setUndo]        = useState(null);
     const [showSearch,  setShowSearch]  = useState(false);
     const [searchQ,     setSearchQ]     = useState("");
@@ -1167,8 +1141,6 @@ useEffect(() => {
 }, []);
 
     // ── Data accessors ──
-    const getGoalsForWeek = wk      => data.weeks?.[wk]?.goals || [];
-    const setGoalsForWeek = (wk,gs) => persist({ ...data, weeks:{ ...data.weeks, [wk]:{ ...data.weeks?.[wk], key:wk, goals:gs } } });
     const getDayGoals     = dk      => data.days?.[dk]?.goals || [];
     const setDayGoals     = (dk,gs) => persist({ ...data, days:{ ...data.days, [dk]:{ ...data.days?.[dk], goals:gs } } });
     const getDayJournal      = dk      => data.journal?.[dk] || "";
@@ -1218,6 +1190,12 @@ useEffect(() => {
     const getMeals      = dk        => data.meals?.[dk] || [];
     const addMeal       = (dk,entry)=> persist({ ...data, meals:{ ...data.meals, [dk]:[...getMeals(dk),entry] } });
     const removeMeal    = (dk,id)   => persist({ ...data, meals:{ ...data.meals, [dk]:getMeals(dk).filter(m=>m.id!==id) } });
+    // ── Movies & Series ──
+    const getMovies      = ()        => data.movies || [];
+    const addMovie       = (title,type="movie") => { if (!title.trim()) return; persist({ ...data, movies:[...getMovies(), { id:uid(), title:title.trim(), type, done:false, addedAt:getTodayKey() }] }); };
+    const removeMovie    = id        => persist({ ...data, movies: getMovies().filter(m=>m.id!==id) });
+    const toggleMovieSeen = id       => persist({ ...data, movies: getMovies().map(m=>m.id===id ? { ...m, done:!m.done, seenAt: !m.done ? getTodayKey() : null } : m) });
+    const reorderMovies  = (from,to) => { const arr=[...getMovies()]; const [item]=arr.splice(from,1); arr.splice(to,0,item); persist({ ...data, movies:arr }); };
     // ── Budget ──
     const getBudgetData       = ()          => data.budget || {};
     const getBudgetExpenses   = ()          => getBudgetData().expenses || [];
@@ -1394,53 +1372,6 @@ useEffect(() => {
     };
     const doUndo = () => { if (undo) { undo.restore(); setUndo(null); clearTimeout(undoTimerRef.current); } };
 
-    // ── View week goals (may differ from current week) ──
-    const viewWg    = getGoalsForWeek(viewWeekKey);
-    const viewTotal = viewWg.length;
-    const viewDone  = viewWg.filter(g => g.done).length;
-    const viewPct   = viewTotal === 0 ? 0 : Math.round(viewDone / viewTotal * 100);
-    const viewColor = pc(viewPct, t);
-
-    const addViewWeekGoal    = (text,cat,pri) => { if (!text.trim()) return; setGoalsForWeek(viewWeekKey, [...viewWg, { id:uid(), text:text.trim(), cat, priority:pri, done:false }]); };
-    const checkWeekPreset    = p => { const ex=viewWg.find(g=>g.text===p.text); if(ex){ toggleViewWeekGoal(ex.id); } else { setGoalsForWeek(viewWeekKey,[...viewWg,{id:uid(),text:p.text.trim(),cat:p.cat,priority:p.priority,done:true}]); playDone(soundOn); } };
-    const toggleViewWeekGoal = id => {
-        const g = viewWg.find(x => x.id === id); if (!g) return;
-        let patch;
-        const switchBonus = (!g.doing && !g.done) ? (pomoElapsedRef.current || 0) : 0;
-        if (!g.doing && !g.done)      { patch = { doing:true,  done:false, startedAt:new Date().toISOString(), pomodoroMins: g.pomodoroMins||0 }; pomoResetRef.current?.(); pomoElapsedRef.current=0; setPomoOpen(true); }
-        else if (g.doing && !g.done)  { const bonus=pomoElapsedRef.current||0; pomoElapsedRef.current=0; pomoResetRef.current?.(); patch = { doing:false, done:true, startedAt:g.startedAt, elapsedMins:(g.pomodoroMins||0)+bonus }; playDone(soundOn); setPomoOpen(false); }
-        else                           patch = { doing:false, done:false, startedAt:null, elapsedMins:null, pomodoroMins:null };
-        // une seule tâche en cours à la fois : sauvegarder le temps partiel sur l'ancienne
-        const updated = viewWg.map(x => {
-            if (x.id===id) return {...x,...patch};
-            if (!g.doing && !g.done && x.doing && !x.done) return {...x, doing:false, startedAt:null, pomodoroMins:(x.pomodoroMins||0)+switchBonus};
-            return x;
-        });
-        setGoalsForWeek(viewWeekKey, updated);
-    };
-    const removeViewWeekGoal = id => {
-        const g = viewWg.find(x => x.id === id);
-        const snap = viewWg;
-        setGoalsForWeek(viewWeekKey, snap.filter(x => x.id !== id));
-        triggerUndo(() => setData(d => { const nd={...d,weeks:{...d.weeks,[viewWeekKey]:{...d.weeks?.[viewWeekKey],key:viewWeekKey,goals:[...(d.weeks?.[viewWeekKey]?.goals||[]),g]}}}; save(nd); return nd; }), `"${g?.text}" ${tr("deleted")}`);
-    };
-    const updateViewWeekGoal = (id, patch) => setGoalsForWeek(viewWeekKey, viewWg.map(g => g.id===id ? {...g,...patch} : g));
-    const addWeekGoalSubtask = (goalId, text) => {
-        if (!text.trim()) return;
-        updateViewWeekGoal(goalId, { subtasks: [...(viewWg.find(g=>g.id===goalId)?.subtasks||[]), {id:uid(), text:text.trim(), done:false}] });
-    };
-    const toggleWeekGoalSubtask = (goalId, subId) => {
-        const g = viewWg.find(x=>x.id===goalId); if (!g) return;
-        updateViewWeekGoal(goalId, { subtasks: (g.subtasks||[]).map(s=>s.id===subId?{...s,done:!s.done}:s) });
-    };
-    const removeWeekGoalSubtask = (goalId, subId) => {
-        const g = viewWg.find(x=>x.id===goalId); if (!g) return;
-        updateViewWeekGoal(goalId, { subtasks: (g.subtasks||[]).filter(s=>s.id!==subId) });
-    };
-    const reorderViewWeekGoals = (from, to) => {
-        const arr = [...viewWg]; const [item] = arr.splice(from,1); arr.splice(to,0,item); setGoalsForWeek(viewWeekKey, arr);
-    };
-
     // ── Day goal handlers ──
     const addDayGoal      = (dk,text,cat="perso",pri="mid") => { if (!text.trim()) return; setDayGoals(dk,[...getDayGoals(dk),{id:uid(),text:text.trim(),cat,priority:pri,done:false,createdAt:dk}]); };
     const checkDayPreset  = (dk,p) => { const gs=getDayGoals(dk); const ex=gs.find(g=>g.text===p.text); if(ex){ toggleDayGoal(dk,ex.id); } else { setDayGoals(dk,[...gs,{id:uid(),text:p.text.trim(),cat:p.cat,priority:p.priority,done:true,createdAt:dk}]); playDone(soundOn); } };
@@ -1480,7 +1411,6 @@ useEffect(() => {
         triggerUndo(() => setData(d => { const nd={...d,days:{...d.days,[dk]:{...d.days?.[dk],goals:[...(d.days?.[dk]?.goals||[]),g]}}}; save(nd); return nd; }), `"${g?.text}" supprimé`);
     };
     const updateDayGoal  = (dk,id,patch) => setDayGoals(dk, getDayGoals(dk).map(g => g.id===id ? {...g,...patch} : g));
-    const linkDayGoal = (dk, goalId, weekGoalId) => updateDayGoal(dk, goalId, { weekGoalId });
     const addDayGoalSubtask = (dk, goalId, text) => {
         if (!text.trim()) return;
         const g = getDayGoals(dk).find(x=>x.id===goalId); if (!g) return;
@@ -1571,23 +1501,6 @@ useEffect(() => {
     };
     const resetDailyHabits = () => persist({ ...data, habits:{ ...data.habits, dailyList:DAILY_HABITS } });
 
-    // ── Recurring tasks auto-copy (once per week) ──
-    useEffect(() => {
-        const flag = `recurringDone_${weekKey}`;
-        if (localStorage.getItem(flag)) return;
-        const prevD = new Date(weekKey); prevD.setDate(prevD.getDate()-7);
-        const prevKey = prevD.toISOString().slice(0,10);
-        const prevGoals = data.weeks?.[prevKey]?.goals || [];
-        const recurring = prevGoals.filter(g => g.recurring);
-        if (recurring.length > 0) {
-            const cur = data.weeks?.[weekKey]?.goals || [];
-            const existTexts = new Set(cur.map(g => g.text));
-            const toAdd = recurring.filter(g => !existTexts.has(g.text)).map(g => ({...g, id:uid(), done:false}));
-            if (toAdd.length > 0) setGoalsForWeek(weekKey, [...cur, ...toAdd]);
-        }
-        localStorage.setItem(flag, "1");
-    }, []); // eslint-disable-line
-
     // ── Notifications ──
     useEffect(() => {
         if (!("Notification" in window)) return;
@@ -1635,19 +1548,10 @@ useEffect(() => {
     }, [undo]); // eslint-disable-line
 
     // ── Computed ──
-    const wg       = getGoalsForWeek(weekKey);
-    const wTotal   = wg.length, wDone = wg.filter(g=>g.done).length;
-    const wPct     = wTotal===0?0:Math.round(wDone/wTotal*100);
-    const wColor   = pc(wPct, t);
     const now      = new Date();
     const monthLabel = MONTHS_FR[now.getMonth()]+" "+now.getFullYear();
-    const isCurrentWeek = viewWeekKey === weekKey;
 
-    const tabs = [["day","📅",tr("tab_day")],["month","📆",tr("tab_month")],["habits","🔄",tr("tab_habits")],["todo","📌","To-Do"],["history","📊",tr("tab_history")],["analytics","📈",tr("tab_analytics")],["recipes","🍽️",tr("tab_recipes")],["cours","🎓",tr("tab_courses")],["projets","📁",tr("tab_projects")],["budget","💰",tr("tab_budget")]];
-
-    // ── Week navigation ──
-    const prevWeek = () => { const d=new Date(viewWeekKey); d.setDate(d.getDate()-7); setViewWeekKey(d.toISOString().slice(0,10)); };
-    const nextWeek = () => { const d=new Date(viewWeekKey); d.setDate(d.getDate()+7); const nk=d.toISOString().slice(0,10); if(nk<=weekKey) setViewWeekKey(nk); };
+    const tabs = [["day","📅",tr("tab_day")],["month","📆",tr("tab_month")],["habits","🔄",tr("tab_habits")],["todo","📌","To-Do"],["history","📊",tr("tab_history")],["analytics","📈",tr("tab_analytics")],["recipes","🍽️",tr("tab_recipes")],["movies","🎬",tr("tab_movies")],["cours","🎓",tr("tab_courses")],["projets","📁",tr("tab_projects")],["budget","💰",tr("tab_budget")]];
 
     // ── Export / Import ──
     const exportData = () => {
@@ -1658,9 +1562,6 @@ useEffect(() => {
         const rows = [[tr("csv_date"),tr("csv_type"),tr("csv_text"),tr("csv_cat"),tr("csv_pri"),tr("csv_done_hdr"),tr("csv_created")]];
         Object.entries(data.days||{}).sort().forEach(([dk,dv]) => {
             (dv.goals||[]).forEach(g => rows.push([dk,tr("csv_task"),g.text,CATEGORIES.find(c=>c.id===g.cat)?.label||g.cat,PRIORITIES.find(p=>p.id===g.priority)?.label||g.priority,g.done?tr("csv_done_hdr"):"Non",g.createdAt||dk]));
-        });
-        Object.entries(data.weeks||{}).sort().forEach(([wk,wv]) => {
-            (wv.goals||[]).forEach(g => rows.push([wk,tr("csv_week_goal"),g.text,CATEGORIES.find(c=>c.id===g.cat)?.label||g.cat,PRIORITIES.find(p=>p.id===g.priority)?.label||g.priority,g.done?tr("csv_done_hdr"):"Non",""]));
         });
         const csv = rows.map(r=>r.map(v=>`"${String(v).replace(/"/g,'""')}"`).join(",")).join("\n");
         const blob = new Blob(["\uFEFF"+csv],{type:"text/csv;charset=utf-8;"});
@@ -1681,8 +1582,8 @@ useEffect(() => {
     };
 
     const H = t.isDark
-        ? { day:"#60a5fa", week:"#c4b5fd", month:"#f472b6", habits:"#34d399", todo:"#a78bfa", history:"#f97316", analytics:"#38bdf8", hist2:"#f97316", cours:"#4ade80", projets:"#60a5fa", budget:"#34d399" }
-        : { day:"#1d4ed8", week:"#5b21b6", month:"#9d174d", habits:"#047857", todo:"#6d28d9", history:"#c2410c", analytics:"#0369a1", recipes:"#b45309", hist2:"#c2410c", cours:"#047857", projets:"#1d4ed8", budget:"#059669" };
+        ? { day:"#60a5fa", week:"#c4b5fd", month:"#f472b6", habits:"#34d399", todo:"#a78bfa", history:"#f97316", analytics:"#38bdf8", hist2:"#f97316", cours:"#4ade80", projets:"#60a5fa", budget:"#34d399", movies:"#fb7185" }
+        : { day:"#1d4ed8", week:"#5b21b6", month:"#9d174d", habits:"#047857", todo:"#6d28d9", history:"#c2410c", analytics:"#0369a1", recipes:"#b45309", hist2:"#c2410c", cours:"#047857", projets:"#1d4ed8", budget:"#059669", movies:"#be123c" };
     const headerTitle = () => {
         if (tab==="day")       return <span style={{ color:H.day }}>{DAYS_FR[weekDays.indexOf(selectedDay)]} {new Date(selectedDay).toLocaleDateString(_LANG==="fr"?"fr-FR":"en-US",{day:"2-digit",month:"long"})}</span>;
         if (tab==="month")     return <span style={{ color:H.month }}>{tr("hdr_month")} — {monthLabel}</span>;
@@ -1691,6 +1592,7 @@ useEffect(() => {
         if (tab==="history")   return <span style={{ color:H.history }}>{tr("hdr_history")}</span>;
         if (tab==="analytics") return <span style={{ color:H.analytics }}>{tr("hdr_analytics")}</span>;
         if (tab==="recipes")   return <span style={{ color:H.recipes }}>{tr("hdr_recipes")} — {getRecipes().length} {getRecipes().length!==1?tr("recipe_pl"):tr("recipe_sg")}</span>;
+        if (tab==="movies")    return <span style={{ color:H.movies }}>{tr("hdr_movies")} — {getMovies().filter(m=>!m.done).length} {tr("to_watch_lbl").toLowerCase()}</span>;
         if (tab==="cours")     return <span style={{ color:H.cours }}>{tr("hdr_courses")} — {getCourses().length} {getCourses().length!==1?tr("subject_pl"):tr("subject_sg")}</span>;
         if (tab==="projets")   return <span style={{ color:H.projets }}>{tr("hdr_projects")} — {getProjects().filter(p=>!p.archived).length} {tr("active_sg")}</span>;
         if (tab==="budget")    return <span style={{ color:H.budget }}>💰 Budget Études</span>;
@@ -1812,13 +1714,14 @@ useEffect(() => {
                     </div>
 
                     <div id="main-content" style={{ flex:1, overflowY:"auto", padding:"22px 26px" }}>
-                        {tab==="day"       && <DayView goals={getDayGoals(selectedDay)} dayKey={selectedDay} todayKey={todayKey} onAdd={(tx,cat,pri)=>addDayGoal(selectedDay,tx,cat,pri)} onToggle={id=>toggleDayGoal(selectedDay,id)} onRemove={id=>removeDayGoal(selectedDay,id)} onUpdate={(id,p)=>updateDayGoal(selectedDay,id,p)} onReorder={(f,to)=>reorderDayGoals(selectedDay,f,to)} onLink={(goalId,wgId)=>linkDayGoal(selectedDay,goalId,wgId)} showPresets={showDayPre} habits={getDailyHabitsList()} habitsDone={getDayHabits(selectedDay)} habitsData={data.habits} onToggleHabit={id=>toggleDayHabit(selectedDay,id)} journal={getDayJournal(selectedDay)} onJournalChange={tx=>setDayJournal(selectedDay,tx)} suggestions={getPendingSuggestions(selectedDay)} onAcceptSugg={task=>acceptSuggestion(selectedDay,task)} onDismissSugg={id=>dismissSuggestion(selectedDay,id)} onMarkSuggDone={task=>markSuggestionDone(selectedDay,task)} onAcceptAllSugg={()=>acceptAllSuggestions(selectedDay)} onDismissAllSugg={()=>dismissAllSuggestions(selectedDay)} weekDoneTasks={weekDays.reduce((sum,dk)=>{const gs=getDayGoals(dk);return sum+gs.filter(g=>g.done).length;},0)} monthTasks={getMonthTasks()} weekGoals={getGoalsForWeek(weekKey)} todoCount={getTodoItems().length} weekReview={getWeekReview(getWeekKey(new Date(selectedDay+"T12:00:00")))} onWeekReviewChange={(patch)=>setWeekReview(getWeekKey(new Date(selectedDay+"T12:00:00")),patch)} onAddSubtask={(goalId,text)=>addDayGoalSubtask(selectedDay,goalId,text)} onToggleSubtask={(goalId,subId)=>toggleDayGoalSubtask(selectedDay,goalId,subId)} onRemoveSubtask={(goalId,subId)=>removeDayGoalSubtask(selectedDay,goalId,subId)} mood={getDayMood(selectedDay)} onMoodChange={v=>setDayMood(selectedDay,v)} meals={getMeals(selectedDay)} onRemoveMeal={id=>removeMeal(selectedDay,id)} projects={getProjects()} courses={getCourses()} courseSessions={getCourseSessions(selectedDay)} upcomingExams={getExams().filter(e=>{ const diff=Math.round((new Date(e.date+"T12:00:00")-new Date(selectedDay+"T12:00:00"))/86400000); return diff>=0&&diff<=14; }).sort((a,b)=>a.date.localeCompare(b.date))} settings={getSettings()} onUpdateSettings={updateSettings} s={s} t={t} />}
-                        {tab==="month"     && <MonthView tasks={getMonthTasks()} monthLabel={monthLabel} wPct={wPct} wDone={wDone} wTotal={wTotal} weekLabel={getWeekLabel(weekKey)} onAdd={addMonthTask} onToggle={toggleMonthTask} onRemove={removeMonthTask} s={s} t={t} />}
+                        {tab==="day"       && <DayView goals={getDayGoals(selectedDay)} dayKey={selectedDay} todayKey={todayKey} onAdd={(tx,cat,pri)=>addDayGoal(selectedDay,tx,cat,pri)} onToggle={id=>toggleDayGoal(selectedDay,id)} onRemove={id=>removeDayGoal(selectedDay,id)} onUpdate={(id,p)=>updateDayGoal(selectedDay,id,p)} onReorder={(f,to)=>reorderDayGoals(selectedDay,f,to)} showPresets={showDayPre} habits={getDailyHabitsList()} habitsDone={getDayHabits(selectedDay)} habitsData={data.habits} onToggleHabit={id=>toggleDayHabit(selectedDay,id)} journal={getDayJournal(selectedDay)} onJournalChange={tx=>setDayJournal(selectedDay,tx)} suggestions={getPendingSuggestions(selectedDay)} onAcceptSugg={task=>acceptSuggestion(selectedDay,task)} onDismissSugg={id=>dismissSuggestion(selectedDay,id)} onMarkSuggDone={task=>markSuggestionDone(selectedDay,task)} onAcceptAllSugg={()=>acceptAllSuggestions(selectedDay)} onDismissAllSugg={()=>dismissAllSuggestions(selectedDay)} weekDoneTasks={weekDays.reduce((sum,dk)=>{const gs=getDayGoals(dk);return sum+gs.filter(g=>g.done).length;},0)} monthTasks={getMonthTasks()} todoCount={getTodoItems().length} weekReview={getWeekReview(getWeekKey(new Date(selectedDay+"T12:00:00")))} onWeekReviewChange={(patch)=>setWeekReview(getWeekKey(new Date(selectedDay+"T12:00:00")),patch)} onAddSubtask={(goalId,text)=>addDayGoalSubtask(selectedDay,goalId,text)} onToggleSubtask={(goalId,subId)=>toggleDayGoalSubtask(selectedDay,goalId,subId)} onRemoveSubtask={(goalId,subId)=>removeDayGoalSubtask(selectedDay,goalId,subId)} mood={getDayMood(selectedDay)} onMoodChange={v=>setDayMood(selectedDay,v)} meals={getMeals(selectedDay)} onRemoveMeal={id=>removeMeal(selectedDay,id)} projects={getProjects()} courses={getCourses()} courseSessions={getCourseSessions(selectedDay)} upcomingExams={getExams().filter(e=>{ const diff=Math.round((new Date(e.date+"T12:00:00")-new Date(selectedDay+"T12:00:00"))/86400000); return diff>=0&&diff<=14; }).sort((a,b)=>a.date.localeCompare(b.date))} settings={getSettings()} onUpdateSettings={updateSettings} s={s} t={t} />}
+                        {tab==="month"     && <MonthView tasks={getMonthTasks()} monthLabel={monthLabel} onAdd={addMonthTask} onToggle={toggleMonthTask} onRemove={removeMonthTask} s={s} t={t} />}
                         {tab==="habits"    && <HabitsView weekDone={getWeekHabits(getWeekKey(new Date(selectedDay+"T12:00:00")))} dayDone={getDayHabits(selectedDay)} onToggleWeek={id=>toggleWeekHabit(id,getWeekKey(new Date(selectedDay+"T12:00:00")))} onToggleDay={id=>toggleDayHabit(selectedDay,id)} habitsData={data.habits} weekKey={getWeekKey(new Date(selectedDay+"T12:00:00"))} selectedDay={selectedDay} weeklyHabits={getWeeklyHabitsList()} dailyHabits={getDailyHabitsList()} onAddWeekly={addWeeklyHabit} onRemoveWeekly={removeWeeklyHabit} onUpdateWeekly={updateWeeklyHabit} onReorderWeekly={reorderWeeklyHabits} onResetWeekly={resetWeeklyHabits} onAddDaily={addDailyHabit} onRemoveDaily={removeDailyHabit} onUpdateDaily={updateDailyHabit} onReorderDaily={reorderDailyHabits} onResetDaily={resetDailyHabits} s={s} t={t} />}
                         {tab==="todo"      && <TodoView items={getTodoItems()} onAdd={addTodoItem} onRemove={removeTodoItem} onUpdate={updateTodoItem} onScheduleToday={scheduleTodoToday} onScheduleToDay={scheduleTodoToDay} s={s} t={t} />}
                         {tab==="history"   && <HistoryView data={data} weekKey={weekKey} onDeletePomodoro={deletePomodoro} onJournalChange={(dk,tx)=>setDayJournal(dk,tx)} onDeleteGoal={(dk,id)=>removeDayGoal(dk,id)} s={s} t={t} />}
                         {tab==="analytics" && <AnalyticsView data={data} weekKey={weekKey} monthKey={monthKey} dailyHabitsCount={getDailyHabitsList().length} journal={data.journal||{}} weekReviews={data.weekReviews||{}} pomodoro={data.pomodoro||{}} settings={getSettings()} onDeleteGoal={(dk,id)=>removeDayGoal(dk,id)} t={t} s={s} />}
                         {tab==="recipes"   && <RecipesView recipes={getRecipes()} meals={data.meals||{}} onAdd={addRecipe} onUpdate={updateRecipe} onDelete={deleteRecipe} onAddMeal={addMeal} onRemoveMeal={removeMeal} s={s} t={t} />}
+                        {tab==="movies"    && <MoviesView movies={getMovies()} onAdd={addMovie} onRemove={removeMovie} onToggleSeen={toggleMovieSeen} onReorder={reorderMovies} s={s} t={t} />}
                         {tab==="cours"     && <CoursesView courses={getCourses()} courseProgress={data.courseProgress||{}} exams={getExams()} onAddCourse={addCourse} onUpdateCourse={updateCourse} onDeleteCourse={deleteCourse} onToggleSession={toggleCourseSession} onAddExam={addExam} onUpdateExam={updateExam} onDeleteExam={deleteExam} data={data} s={s} t={t} />}
                         {tab==="projets"   && <ProjectsView projects={getProjects()} data={data} onAddProject={addProject} onUpdateProject={updateProject} onDeleteProject={deleteProject} s={s} t={t} />}
                         {tab==="budget"    && <BudgetView expenses={getBudgetExpenses()} contributions={getBudgetContribs()} reimbursements={getBudgetReimbs()} settings={getBudgetSettings()} onAddExpense={addBudgetExpense} onUpdateExpense={updateBudgetExpense} onDeleteExpense={deleteBudgetExpense} onAddContribution={addBudgetContrib} onDeleteContribution={deleteBudgetContrib} onUpdateSettings={updateBudgetSettings} onAddReimb={addBudgetReimb} onDeleteReimb={deleteBudgetReimb} visible={budgetVisible} onShow={()=>setBudgetVisible(true)} onHide={()=>setBudgetVisible(false)} s={s} t={t} />}
@@ -1833,7 +1736,6 @@ useEffect(() => {
                         searchInputRef={searchInputRef}
                         onClose={()=>{ setShowSearch(false); setSearchQ(""); }}
                         onGoToDay={dk=>{ setSelectedDay(dk); setTab("day"); }}
-                        onGoToWeek={wk=>{ setViewWeekKey(wk); setTab("week"); }}
                     />
                 )}
 
@@ -1843,7 +1745,6 @@ useEffect(() => {
                         tab={qaTab} setTab={setQaTab}
                         onClose={() => setShowQuickAdd(false)}
                         onAddDay={(text,cat,pri) => addDayGoal(todayKey,text,cat,pri)}
-                        onAddWeek={(text,cat,pri) => addViewWeekGoal(text,cat,pri)}
                         onAddTodo={(text,cat,pri) => addTodoItem(text,cat,pri)}
                         s={s} t={t}
                     />
@@ -1978,7 +1879,7 @@ function PresetPanel({ habits, habitsDone, habitsData, dayKey, onToggle, label, 
 
 // ── DayView ───────────────────────────────────────────────────────────────────
 
-function DayView({ goals, dayKey, onAdd, onToggle, onRemove, onUpdate, onReorder, onLink, showPresets, habits, habitsDone, habitsData, onToggleHabit, journal, onJournalChange, suggestions, onAcceptSugg, onDismissSugg, onMarkSuggDone, onAcceptAllSugg, onDismissAllSugg, weekDoneTasks, monthTasks, weekGoals, todoCount, todayKey, weekReview, onWeekReviewChange, onAddSubtask, onToggleSubtask, onRemoveSubtask, mood, onMoodChange, meals, onRemoveMeal, projects, courses, courseSessions, upcomingExams, settings, onUpdateSettings, s, t }) {
+function DayView({ goals, dayKey, onAdd, onToggle, onRemove, onUpdate, onReorder, showPresets, habits, habitsDone, habitsData, onToggleHabit, journal, onJournalChange, suggestions, onAcceptSugg, onDismissSugg, onMarkSuggDone, onAcceptAllSugg, onDismissAllSugg, weekDoneTasks, monthTasks, todoCount, todayKey, weekReview, onWeekReviewChange, onAddSubtask, onToggleSubtask, onRemoveSubtask, mood, onMoodChange, meals, onRemoveMeal, projects, courses, courseSessions, upcomingExams, settings, onUpdateSettings, s, t }) {
     const [text, setText]       = useState("");
     const [cat,  setCat]        = useState("perso");
     const [pri,  setPri]        = useState("mid");
@@ -2184,7 +2085,7 @@ function DayView({ goals, dayKey, onAdd, onToggle, onRemove, onUpdate, onReorder
                                         ? <div style={{textAlign:"center",color:t.textTiny,padding:"32px 0",fontSize:13}}>{tr("no_tasks_day")}</div>
                                         : <>
                                             {committedFiltered.map((g,i)=>(
-                                                <GoalItem key={g.id} goal={g} idx={goals.indexOf(g)} onToggle={()=>onToggle(g.id)} onRemove={()=>onRemove(g.id)} onUpdate={p=>onUpdate(g.id,p)} onReorder={handleReorder} showPendingBadge isDay weekGoals={weekGoals} onLink={wgId=>onLink(g.id,wgId)} onAddSubtask={text=>onAddSubtask(g.id,text)} onToggleSubtask={sid=>onToggleSubtask(g.id,sid)} onRemoveSubtask={sid=>onRemoveSubtask(g.id,sid)} projects={projects||[]} courses={courses||[]} t={t} s={s} />
+                                                <GoalItem key={g.id} goal={g} idx={goals.indexOf(g)} onToggle={()=>onToggle(g.id)} onRemove={()=>onRemove(g.id)} onUpdate={p=>onUpdate(g.id,p)} onReorder={handleReorder} showPendingBadge isDay onAddSubtask={text=>onAddSubtask(g.id,text)} onToggleSubtask={sid=>onToggleSubtask(g.id,sid)} onRemoveSubtask={sid=>onRemoveSubtask(g.id,sid)} projects={projects||[]} courses={courses||[]} t={t} s={s} />
                                             ))}
                                             {bonusFiltered.length>0 && (
                                                 <>
@@ -2194,7 +2095,7 @@ function DayView({ goals, dayKey, onAdd, onToggle, onRemove, onUpdate, onReorder
                                                         <div style={{ flex:1, height:1, background:t.divider }}/>
                                                     </div>
                                                     {bonusFiltered.map((g,i)=>(
-                                                        <GoalItem key={g.id} goal={g} idx={goals.indexOf(g)} onToggle={()=>onToggle(g.id)} onRemove={()=>onRemove(g.id)} onUpdate={p=>onUpdate(g.id,p)} onReorder={handleReorder} showPendingBadge isDay weekGoals={weekGoals} onLink={wgId=>onLink(g.id,wgId)} onAddSubtask={text=>onAddSubtask(g.id,text)} onToggleSubtask={sid=>onToggleSubtask(g.id,sid)} onRemoveSubtask={sid=>onRemoveSubtask(g.id,sid)} projects={projects||[]} courses={courses||[]} t={t} s={s} />
+                                                        <GoalItem key={g.id} goal={g} idx={goals.indexOf(g)} onToggle={()=>onToggle(g.id)} onRemove={()=>onRemove(g.id)} onUpdate={p=>onUpdate(g.id,p)} onReorder={handleReorder} showPendingBadge isDay onAddSubtask={text=>onAddSubtask(g.id,text)} onToggleSubtask={sid=>onToggleSubtask(g.id,sid)} onRemoveSubtask={sid=>onRemoveSubtask(g.id,sid)} projects={projects||[]} courses={courses||[]} t={t} s={s} />
                                                     ))}
                                                 </>
                                             )}
@@ -2225,10 +2126,6 @@ function DayView({ goals, dayKey, onAdd, onToggle, onRemove, onUpdate, onReorder
                                 <div style={{ fontSize:11, color:t.textDim }}>{tr("month_prio")}</div>
                                 <div style={{ fontSize:20, fontWeight:800, color:t.text }}>{monthTasks?.length ?? 0}/3</div>
                                 {monthTasks && monthTasks.filter(x=>x.done).length > 0 && <div style={{ fontSize:10, color:"#34d399" }}>{monthTasks.filter(x=>x.done).length} {tr("monday_accomplished")}</div>}
-                            </div>
-                            <div style={{ display:"flex", flexDirection:"column", gap:4 }}>
-                                <div style={{ fontSize:11, color:t.textDim }}>{tr("week_goals")}</div>
-                                <div style={{ fontSize:20, fontWeight:800, color:t.text }}>{weekGoals?.length ?? 0}</div>
                             </div>
                             <div style={{ display:"flex", flexDirection:"column", gap:4 }}>
                                 <div style={{ fontSize:11, color:t.textDim }}>{tr("backlog")}</div>
@@ -2333,98 +2230,23 @@ function DayView({ goals, dayKey, onAdd, onToggle, onRemove, onUpdate, onReorder
     );
 }
 
-// ── WeekView ──────────────────────────────────────────────────────────────────
-
-function WeekView({ goals, wTotal, wDone, wPct, wColor, onAdd, onToggle, onRemove, onUpdate, onReorder, showPresets, habits, habitsDone, onToggleHabit, onAddPreset, onAddSubtask, onToggleSubtask, onRemoveSubtask, s, t }) {
-    const [text, setText]       = useState("");
-    const [cat,  setCat]        = useState("pro");
-    const [pri,  setPri]        = useState("mid");
-    const [filterCat,  setFC]   = useState("all");
-    const [filterStatus, setFS] = useState("all");
-
-    const filtered = goals
-        .filter(g=>filterCat==="all"||g.cat===filterCat)
-        .filter(g=>filterStatus==="all"
-            ||(filterStatus==="done"  ? g.done
-                :  filterStatus==="doing" ? (g.doing&&!g.done)
-                    :  (!g.done&&!g.doing)))
-        .sort((a,b)=>{
-            const stateA=a.done?2:a.doing?0:1, stateB=b.done?2:b.doing?0:1;
-            if(stateA!==stateB) return stateA-stateB;
-            return ({high:0,mid:1,low:2}[a.priority]??1)-({high:0,mid:1,low:2}[b.priority]??1);
-        });
-
-    const filteredIds = filtered.map(g=>g.id);
-    const handleReorder = (fromIdx, toIdx) => {
-        const fromId=filteredIds[fromIdx], toId=filteredIds[toIdx];
-        const origFrom=goals.findIndex(g=>g.id===fromId), origTo=goals.findIndex(g=>g.id===toId);
-        onReorder(origFrom, origTo);
-    };
-
-    return (
-        <div className="fi">
-            <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit,minmax(140px,1fr))", gap:12, marginBottom:22 }}>
-                <StatCard label={tr("planned_tasks")}     value={wTotal}      color={catCol("pro",t)}   delay={0}    t={t} />
-                <StatCard label={tr("done_lbl")} value={wDone}        color={catCol("sport",t)} delay={0.05} t={t} />
-                <StatCard label={tr("remaining")}  value={wTotal-wDone} color={priCol("mid",t)}   delay={0.1}  t={t} />
-                <StatCard label={tr("success_rate")}  value={wPct+"%"}     color={wColor}  delay={0.15} t={t} />
-            </div>
-            <div style={{ display:"grid", gridTemplateColumns:showPresets?"1fr 270px":"1fr", gap:18 }}>
-                <div className="gc" style={s.card}>
-                    <div style={s.cardHead}><span style={s.cardTitle}>{tr("week_goals_title")}</span><span style={{ fontSize:11, color:t.textDim }}>{wDone}/{wTotal}</span></div>
-                    <div style={{ padding:"12px 16px", borderBottom:`1px solid ${t.divider}`, display:"flex", gap:8, flexWrap:"wrap" }}>
-                        <input style={{ ...s.input, flex:1, minWidth:160 }} value={text} onChange={e=>setText(e.target.value)}
-                               onKeyDown={e=>{ if(e.key==="Enter"){ onAdd(text,cat,pri); setText(""); } }}
-                               placeholder={tr("new_goal_ph")} />
-                        <select style={s.sel} value={cat} onChange={e=>setCat(e.target.value)}>
-                            {CATEGORIES.map(c=><option key={c.id} value={c.id}>{CAT_ICONS[c.id]} {c.label}</option>)}
-                        </select>
-                        <select style={s.sel} value={pri} onChange={e=>setPri(e.target.value)}>
-                            {PRIORITIES.map(p=><option key={p.id} value={p.id}>{p.label}</option>)}
-                        </select>
-                        <button className="bg" style={s.addBtn} onClick={()=>{ onAdd(text,cat,pri); setText(""); }}>{tr("add")}</button>
-                    </div>
-                    <GoalFilters filterStatus={filterStatus} setFS={setFS} filterCat={filterCat} setFC={setFC} t={t} />
-                    <div style={{ padding:"6px 8px", minHeight:80, maxHeight:420, overflowY:"auto" }}>
-                        {filtered.length===0
-                            ? <div style={{ textAlign:"center", color:t.textTiny, padding:"32px 0", fontSize:13 }}>{tr("no_goals_week")}</div>
-                            : filtered.map((g,i)=>(
-                                <GoalItem key={g.id} goal={g} idx={i} onToggle={()=>onToggle(g.id)} onRemove={()=>onRemove(g.id)} onUpdate={p=>onUpdate(g.id,p)} onReorder={handleReorder} isWeekGoal onAddSubtask={text=>onAddSubtask(g.id,text)} onToggleSubtask={sid=>onToggleSubtask(g.id,sid)} onRemoveSubtask={sid=>onRemoveSubtask(g.id,sid)} t={t} s={s} />
-                            ))
-                        }
-                    </div>
-                    <CatProgressBars goals={goals} t={t} />
-                </div>
-                {showPresets && <PresetPanel habits={habits} habitsDone={habitsDone} onToggle={onToggleHabit} label="🗓 Habitudes de la semaine" s={s} t={t} />}
-            </div>
-        </div>
-    );
-}
-
 // ── MonthView ─────────────────────────────────────────────────────────────────
 
-function MonthView({ tasks, monthLabel, wPct, wDone, wTotal, weekLabel, onAdd, onToggle, onRemove, s, t }) {
+function MonthView({ tasks, monthLabel, onAdd, onToggle, onRemove, s, t }) {
     const [text, setText] = useState("");
     const canAdd = tasks.length < 3;
     const done   = tasks.filter(x=>x.done).length;
-    const wc     = pc(wPct, t);
 
     return (
         <div className="fi">
             <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit,minmax(140px,1fr))", gap:12, marginBottom:22 }}>
                 <StatCard label={tr("priorities_lbl")}  value={`${tasks.length}/3`} color={catCol("maison",t)} delay={0}    t={t} />
                 <StatCard label={tr("accomplished")} value={done}                 color={catCol("sport",t)}  delay={0.05} t={t} />
-                <StatCard label={tr("week_stat_lbl")}    value={`${wPct}%`}           color={wc}      delay={0.1}  t={t} />
             </div>
             <div className="gc" style={s.card}>
                 <div style={s.cardHead}>
                     <span style={s.cardTitle}>{tr("month_card_title")} {monthLabel}</span>
                     <span style={{ fontSize:11, color:t.textDim }}>{done}/{tasks.length} {tr("month_accomplished")}</span>
-                </div>
-                <div style={{ margin:"12px 16px 0", padding:"10px 14px", borderRadius:10, background:t.weekCtxBg, border:`1px solid ${t.cardBdr}`, display:"flex", alignItems:"center", gap:10 }}>
-                    <span style={{ fontSize:11, color:t.text, whiteSpace:"nowrap", flexShrink:0 }}>{tr("month_week_label")} {weekLabel}</span>
-                    <div style={{ flex:1, minWidth:0 }}><ProgressBar pct={wPct} color={wc} t={t} /></div>
-                    <span style={{ fontSize:11, fontWeight:700, color:wc, whiteSpace:"nowrap", flexShrink:0 }}>{wDone}/{wTotal}</span>
                 </div>
                 <div style={{ padding:"16px", display:"flex", flexDirection:"column", gap:10 }}>
                     {[0,1,2].map(i=>{
@@ -2943,9 +2765,21 @@ function JournalHistoryEntry({ dk, tx, isOpen, onToggle, onSave, t, s }) {
 
 // ── HistoryView ───────────────────────────────────────────────────────────────
 
+function SectionHeader({ label, count, open, onToggle, t }) {
+    return (
+        <button onClick={onToggle} style={{ width:"100%", display:"flex", justifyContent:"space-between", alignItems:"center", padding:"12px 18px", background:"none", border:"none", cursor:"pointer", borderBottom: open ? `1px solid ${t.divider}` : "none" }}>
+            <span style={{ fontSize:13, fontWeight:700, color:t.text }}>{label}</span>
+            <div style={{ display:"flex", alignItems:"center", gap:8 }}>
+                <span style={{ fontSize:11, color:t.textDim, padding:"2px 10px", borderRadius:20, background:t.progressBg }}>{count}</span>
+                <span style={{ fontSize:12, color:t.textDim }}>{open ? "▲" : "▼"}</span>
+            </div>
+        </button>
+    );
+}
+
 function HistoryView({ data, weekKey, onDeletePomodoro, onJournalChange, onDeleteGoal, s, t }) {
     const [query, setQuery] = useState("");
-    const [openSections, setOpenSections] = useState({ journal: true, days: false, weeks: false, pomo: false });
+    const [openSections, setOpenSections] = useState({ journal: true, days: false, pomo: false });
     const [openItems, setOpenItems] = useState({});
 
     const q = query.trim().toLowerCase();
@@ -2964,22 +2798,6 @@ function HistoryView({ data, weekKey, onDeletePomodoro, onJournalChange, onDelet
         .filter(([dk, dv]) => (dv.goals||[]).length > 0)
         .filter(([dk, dv]) => !q || dk.includes(q) || (dv.goals||[]).some(g => g.text.toLowerCase().includes(q)))
         .sort(([a],[b]) => b.localeCompare(a));
-
-    // Weekly goals history
-    const weekEntries = Object.entries(data.weeks||{})
-        .filter(([,wv]) => (wv.goals||[]).length > 0)
-        .filter(([wk, wv]) => !q || wk.includes(q) || (wv.goals||[]).some(g => g.text.toLowerCase().includes(q)))
-        .sort(([a],[b]) => b.localeCompare(a));
-
-    const SectionHeader = ({ label, count, open, onToggle }) => (
-        <button onClick={onToggle} style={{ width:"100%", display:"flex", justifyContent:"space-between", alignItems:"center", padding:"12px 18px", background:"none", border:"none", cursor:"pointer", borderBottom: open ? `1px solid ${t.divider}` : "none" }}>
-            <span style={{ fontSize:13, fontWeight:700, color:t.text }}>{label}</span>
-            <div style={{ display:"flex", alignItems:"center", gap:8 }}>
-                <span style={{ fontSize:11, color:t.textDim, padding:"2px 10px", borderRadius:20, background:t.progressBg }}>{count}</span>
-                <span style={{ fontSize:12, color:t.textDim }}>{open ? "▲" : "▼"}</span>
-            </div>
-        </button>
-    );
 
     return (
         <div className="fi" style={{ display:"grid", gap:14 }}>
@@ -3007,7 +2825,7 @@ function HistoryView({ data, weekKey, onDeletePomodoro, onJournalChange, onDelet
 
             {/* Journal section */}
             <div className="gc" style={s.card}>
-                <SectionHeader label={tr("journal_section")} count={`${journalEntries.length} ${journalEntries.length!==1?tr("entry_pl"):tr("entry_sg")}`} open={openSections.journal} onToggle={() => toggleSection("journal")} />
+                <SectionHeader label={tr("journal_section")} count={`${journalEntries.length} ${journalEntries.length!==1?tr("entry_pl"):tr("entry_sg")}`} open={openSections.journal} onToggle={() => toggleSection("journal")} t={t} />
                 {openSections.journal && (
                     <div style={{ padding:"10px 14px", display:"flex", flexDirection:"column", gap:8 }}>
                         {journalEntries.length === 0
@@ -3023,7 +2841,7 @@ function HistoryView({ data, weekKey, onDeletePomodoro, onJournalChange, onDelet
 
             {/* Day tasks section */}
             <div className="gc" style={s.card}>
-                <SectionHeader label={tr("tasks_section")} count={`${dayEntries.length} ${dayEntries.length!==1?tr("day_pl"):tr("day_sg")}`} open={openSections.days} onToggle={() => toggleSection("days")} />
+                <SectionHeader label={tr("tasks_section")} count={`${dayEntries.length} ${dayEntries.length!==1?tr("day_pl"):tr("day_sg")}`} open={openSections.days} onToggle={() => toggleSection("days")} t={t} />
                 {openSections.days && (
                     <div style={{ padding:"10px 14px", display:"flex", flexDirection:"column", gap:8 }}>
                         {dayEntries.length === 0
@@ -3064,45 +2882,6 @@ function HistoryView({ data, weekKey, onDeletePomodoro, onJournalChange, onDelet
                 )}
             </div>
 
-            {/* Weekly goals section */}
-            <div className="gc" style={s.card}>
-                <SectionHeader label={tr("weekly_section")} count={`${weekEntries.length} ${weekEntries.length!==1?tr("week_pl"):tr("week_sg")}`} open={openSections.weeks} onToggle={() => toggleSection("weeks")} />
-                {openSections.weeks && (
-                    <div style={{ padding:"10px 14px", display:"flex", flexDirection:"column", gap:8 }}>
-                        {weekEntries.length === 0
-                            ? <div style={{ textAlign:"center", color:t.textTiny, padding:"24px 0", fontSize:12 }}>{q?tr("no_weeks_q"):tr("no_weeks")}</div>
-                            : weekEntries.map(([wk, wv]) => {
-                                const isOpen = !!openItems["w_"+wk];
-                                const goals = q ? (wv.goals||[]).filter(g => !q || g.text.toLowerCase().includes(q) || wk.includes(q)) : (wv.goals||[]);
-                                const done = goals.filter(g=>g.done).length;
-                                const pct = goals.length ? Math.round(done/goals.length*100) : 0;
-                                const col = pc(pct, t);
-                                return (
-                                    <div key={wk} style={{ borderRadius:10, border:`1px solid ${t.cardBdr}`, overflow:"hidden" }}>
-                                        <button onClick={() => toggleItem("w_"+wk)} style={{ width:"100%", display:"flex", justifyContent:"space-between", alignItems:"center", padding:"8px 14px", background:t.progressBg, border:"none", cursor:"pointer" }}>
-                                            <span style={{ fontSize:12, fontWeight:700, color:"#f97316" }}>📅 {getWeekLabel(wk)}</span>
-                                            <div style={{ display:"flex", alignItems:"center", gap:8 }}>
-                                                <span style={{ fontSize:11, color:col, fontWeight:700 }}>{done}/{goals.length} — {pct}%</span>
-                                                <span style={{ fontSize:10, color:t.textDim }}>{isOpen ? "▲" : "▼"}</span>
-                                            </div>
-                                        </button>
-                                        {isOpen && (
-                                            <div style={{ padding:"10px 14px", display:"flex", flexWrap:"wrap", gap:5 }}>
-                                                {goals.map(g => (
-                                                    <span key={g.id} style={{ fontSize:11, padding:"3px 10px", borderRadius:20, background:g.done?t.tagDone:t.tagBg, color:g.done?"#34d399":t.textDim, border:`1px solid ${g.done?t.tagDoneBdr:t.tagBdr}` }}>
-                              {g.done?"✓":"✕"} {g.text}
-                            </span>
-                                                ))}
-                                            </div>
-                                        )}
-                                    </div>
-                                );
-                            })
-                        }
-                    </div>
-                )}
-            </div>
-
             {/* Pomodoro log */}
             {(() => {
                 const fmtTime = m => m >= 60 ? `${Math.floor(m/60)}h${m%60>0?String(m%60).padStart(2,"0"):""}` : `${m} min`;
@@ -3126,6 +2905,7 @@ function HistoryView({ data, weekKey, onDeletePomodoro, onJournalChange, onDelet
                             count={`${totalSessions} ${totalSessions!==1?tr("session_pl"):tr("session_sg")} · ${fmtTime(totalMins)}`}
                             open={openSections.pomo}
                             onToggle={() => toggleSection("pomo")}
+                            t={t}
                         />
                         {openSections.pomo && (
                             <div style={{ padding:"10px 14px", display:"flex", flexDirection:"column", gap:10 }}>
@@ -3169,21 +2949,8 @@ function AnalyticsView({ data, weekKey, monthKey, dailyHabitsCount, journal, wee
     const scoreMinL3  = settings?.scoreMinL3  ?? SCORE_MIN_L3;
     const today = new Date(getTodayKey());
 
-    // Last 8 weeks bar chart
-    const weeks8 = Array.from({length:8}, (_,i) => {
-        const d = new Date(weekKey); d.setDate(d.getDate() - i*7);
-        const wk = d.toISOString().slice(0,10);
-        const goals = data.weeks?.[wk]?.goals || [];
-        const done  = goals.filter(g=>g.done).length;
-        const pct   = goals.length ? Math.round(done/goals.length*100) : 0;
-        return { wk, done, total:goals.length, pct };
-    }).reverse();
-
     // All-time goals (for stacked bar)
-    const allGoals = [
-        ...Object.values(data.weeks||{}).flatMap(w=>w.goals||[]),
-        ...Object.values(data.days||{}).flatMap(d=>d.goals||[]),
-    ];
+    const allGoals = Object.values(data.days||{}).flatMap(d=>d.goals||[]);
 
     // Journal entries sorted by date desc
     const journalEntries = Object.entries(journal)
@@ -3202,8 +2969,6 @@ function AnalyticsView({ data, weekKey, monthKey, dailyHabitsCount, journal, wee
             return { dk, done, total, isFuture: d > today };
         })
     );
-
-    const maxDone = Math.max(...weeks8.map(w=>w.done), 1);
 
     // Feature 3: Best day of week (4 dernières semaines, exclut aujourd'hui)
     const weekdayStats = Array.from({length:7}, (_,wi) => {
@@ -3412,30 +3177,6 @@ function AnalyticsView({ data, weekKey, monthKey, dailyHabitsCount, journal, wee
                     }
                 </div>
             </div>
-
-            {/* Weekly completion bars */}
-            <div className="gc" style={s.card}>
-                <div style={s.cardHead}><span style={s.cardTitle}>{tr("weekly_chart")}</span></div>
-                <div style={{ padding:"20px 24px" }}>
-                    <div style={{ display:"flex", alignItems:"flex-end", gap:8, height:120 }}>
-                        {weeks8.map((w,i) => {
-                            const col = pc(w.pct, t);
-                            const h   = w.total ? Math.max((w.done/maxDone)*100, w.total?4:0) : 0;
-                            return (
-                                <div key={w.wk} style={{ flex:1, display:"flex", flexDirection:"column", alignItems:"center", gap:4, height:"100%" }}>
-                                    <div style={{ fontSize:11, color:col, fontWeight:800, lineHeight:1 }}>{w.done||""}</div>
-                                    <div style={{ flex:1, width:"100%", display:"flex", alignItems:"flex-end" }}>
-                                        <div className="pb" style={{ width:"100%", height:`${h}%`, minHeight:w.total?3:0, background:`linear-gradient(180deg,${col},${col}99)`, borderRadius:"5px 5px 2px 2px", boxShadow:w.done?`0 -2px 10px ${col}44`:"none", transition:"height 1s cubic-bezier(0.4,0,0.2,1)" }} />
-                                    </div>
-                                    <div style={{ fontSize:9, color:t.textDim }}>{w.total?`${w.pct}%`:"-"}</div>
-                                    <div style={{ fontSize:8, color:t.textTiny, textAlign:"center" }}>{new Date(w.wk).toLocaleDateString(_LANG==="fr"?"fr-FR":"en-US",{day:"2-digit",month:"2-digit"})}</div>
-                                </div>
-                            );
-                        })}
-                    </div>
-                </div>
-            </div>
-
 
             {/* Most postponed tasks */}
             {(() => {
@@ -3849,6 +3590,93 @@ function PomodoroWidget({ soundOn, onClose, onWorkComplete, doingTasks, allTasks
                     </select>
                 </div>
             )}
+        </div>
+    );
+}
+
+// ── MoviesView ────────────────────────────────────────────────────────────────
+
+function MoviesView({ movies, onAdd, onRemove, onToggleSeen, onReorder, s, t }) {
+    const [text, setText] = useState("");
+    const [type, setType] = useState("movie");
+    const [showSeen, setShowSeen] = useState(false);
+
+    const active = movies.filter(m => !m.done);
+    const seen   = movies.filter(m => m.done).slice().sort((a, b) => (b.seenAt||"").localeCompare(a.seenAt||""));
+
+    const handleAdd = () => { if (!text.trim()) return; onAdd(text, type); setText(""); };
+    const handleReorder = (fromIdx, toIdx) => {
+        const fromId = active[fromIdx]?.id, toId = active[toIdx]?.id;
+        const origFrom = movies.findIndex(m => m.id === fromId), origTo = movies.findIndex(m => m.id === toId);
+        if (origFrom !== -1 && origTo !== -1) onReorder(origFrom, origTo);
+    };
+
+    return (
+        <div className="fi" style={{ display:"grid", gap:18 }}>
+            <div className="gc" style={s.card}>
+                <div style={{ padding:"12px 16px", display:"flex", gap:8, flexWrap:"wrap" }}>
+                    <input style={{ ...s.input, flex:1, minWidth:160 }} value={text} onChange={e=>setText(e.target.value)}
+                           onKeyDown={e=>{ if (e.key==="Enter") handleAdd(); }}
+                           placeholder={tr("new_movie_ph")} />
+                    <select style={s.sel} value={type} onChange={e=>setType(e.target.value)}>
+                        <option value="movie">{tr("type_movie")}</option>
+                        <option value="series">{tr("type_series")}</option>
+                    </select>
+                    <button className="bg" style={s.addBtn} onClick={handleAdd}>{tr("add")}</button>
+                </div>
+                <div style={{ padding:"6px 8px 10px" }}>
+                    {active.length === 0
+                        ? <div style={{ textAlign:"center", color:t.textTiny, padding:"32px 0", fontSize:13 }}>{tr("no_movies")}</div>
+                        : active.map((m, i) => (
+                            <MovieRow key={m.id} movie={m} idx={i} onReorder={handleReorder} onToggleSeen={()=>onToggleSeen(m.id)} onRemove={()=>onRemove(m.id)} t={t} />
+                        ))
+                    }
+                </div>
+            </div>
+
+            <div className="gc" style={s.card}>
+                <SectionHeader label={tr("seen_section")} count={seen.length} open={showSeen} onToggle={()=>setShowSeen(v=>!v)} t={t} />
+                {showSeen && (
+                    <div style={{ padding:"6px 8px" }}>
+                        {seen.length === 0
+                            ? <div style={{ textAlign:"center", color:t.textTiny, padding:"24px 0", fontSize:12 }}>{tr("no_seen")}</div>
+                            : seen.map(m => (
+                                <div key={m.id} style={{ display:"flex", alignItems:"center", gap:8, padding:"7px 10px" }}>
+                                    <span style={{ fontSize:13, opacity:0.5 }}>{m.type==="series"?"📺":"🎬"}</span>
+                                    <span style={{ flex:1, fontSize:13, color:t.textDim, textDecoration:"line-through" }}>{m.title}</span>
+                                    <button title={tr("mark_unseen_tip")} onClick={()=>onToggleSeen(m.id)}
+                                            style={{ background:"none", border:"none", cursor:"pointer", fontSize:12, color:t.textSub, padding:"1px 4px", opacity:0.5 }}
+                                            onMouseEnter={e=>e.currentTarget.style.opacity="1"} onMouseLeave={e=>e.currentTarget.style.opacity="0.5"}>↺</button>
+                                    <button onClick={()=>onRemove(m.id)}
+                                            style={{ background:"none", border:"none", cursor:"pointer", fontSize:12, color:t.delColor, padding:"1px 4px", opacity:0.35 }}
+                                            onMouseEnter={e=>e.currentTarget.style.opacity="1"} onMouseLeave={e=>e.currentTarget.style.opacity="0.35"}>✕</button>
+                                </div>
+                            ))
+                        }
+                    </div>
+                )}
+            </div>
+        </div>
+    );
+}
+
+function MovieRow({ movie, idx, onReorder, onToggleSeen, onRemove, t }) {
+    const [dragOver, setDragOver] = useState(false);
+    return (
+        <div draggable
+             onDragStart={e => e.dataTransfer.setData("text/plain", String(idx))}
+             onDragOver={e => { e.preventDefault(); setDragOver(true); }}
+             onDragLeave={() => setDragOver(false)}
+             onDrop={e => { e.preventDefault(); setDragOver(false); const from = +e.dataTransfer.getData("text/plain"); if (from !== idx) onReorder(from, idx); }}
+             className="fu"
+             style={{ display:"flex", alignItems:"center", gap:10, padding:"8px 10px", borderRadius:10, marginBottom:4, background:t.habitBg, border:`1px solid ${dragOver?"rgba(139,92,246,0.5)":t.cardBdr}`, outline:dragOver?"2px dashed rgba(139,92,246,0.35)":"none" }}>
+            <span style={{ cursor:"grab", color:t.textTiny, fontSize:13, flexShrink:0, userSelect:"none" }}>⠿</span>
+            <Checkbox done={false} color="#fb7185" t={t} onToggle={onToggleSeen} />
+            <span style={{ fontSize:14, flexShrink:0 }}>{movie.type==="series"?"📺":"🎬"}</span>
+            <span style={{ flex:1, minWidth:0, fontSize:13, color:t.text, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{movie.title}</span>
+            <button onClick={onRemove}
+                    style={{ background:"none", border:"none", cursor:"pointer", fontSize:12, color:t.delColor, padding:"1px 4px", opacity:0.35 }}
+                    onMouseEnter={e=>e.currentTarget.style.opacity="1"} onMouseLeave={e=>e.currentTarget.style.opacity="0.35"}>✕</button>
         </div>
     );
 }
@@ -4696,7 +4524,7 @@ function RecipesView({ recipes, meals, onAdd, onUpdate, onDelete, onAddMeal, onR
 
 // ── QuickAddModal ─────────────────────────────────────────────────────────────
 
-function QuickAddModal({ tab, setTab, onClose, onAddDay, onAddWeek, onAddTodo, s, t }) {
+function QuickAddModal({ tab, setTab, onClose, onAddDay, onAddTodo, s, t }) {
     const [text, setText] = useState("");
     const [cat,  setCat]  = useState("perso");
     const [pri,  setPri]  = useState("mid");
@@ -4779,7 +4607,7 @@ const BUDGET_I18N = {
         recurring:"🔁 Recurring Transfers", one_time:"💸 One-time Contributions",
         monthly_budget:"Monthly Budgets", annual_budget:"Fixed Expenses (monthly amortized)",
         add_expense:"+ Expense", add_contrib:"+ Add", configure:"+ Configure",
-        reimburse:"✓ Log reimbursement", close:"✕ Close", save:"Save", cancel:"Cancel",
+        reimburse:"✓ Log reimbursement", close:"✕ Close", save:"Save", cancel:"Cancel", modify:"Update",
         description:"Description *", amount:"Amount *", currency:"Currency", date:"Date",
         paid_by:"Paid by", category:"Category", shared:"Shared expense (both should have paid)",
         exclude_balance:"Exclude from balance", maman_share:"Maman's share %", note_opt:"Note (optional)",
@@ -4810,7 +4638,7 @@ const BUDGET_I18N = {
         recurring:"🔁 Virements récurrents", one_time:"💸 Contributions ponctuelles",
         monthly_budget:"Budgets mensuels", annual_budget:"Dépenses fixes (amorties/mois)",
         add_expense:"+ Dépense", add_contrib:"+ Ajouter", configure:"+ Configurer",
-        reimburse:"✓ Logger un remboursement", close:"✕ Fermer", save:"Enregistrer", cancel:"Annuler",
+        reimburse:"✓ Logger un remboursement", close:"✕ Fermer", save:"Enregistrer", cancel:"Annuler", modify:"Modifier",
         description:"Description *", amount:"Montant *", currency:"Devise", date:"Date",
         paid_by:"Payé par", category:"Catégorie", shared:"Dépense partagée (les deux auraient dû payer)",
         exclude_balance:"Exclure de la balance", maman_share:"Part de Maman %", note_opt:"Note (optionnel)",
@@ -4892,6 +4720,7 @@ function BudgetView({ expenses, contributions, reimbursements, settings, onAddEx
     const [editExp,          setEditExp]          = useState(null);
     const [showContrib,      setShowContrib]      = useState(false);
     const [showRecurForm,    setShowRecurForm]    = useState(false);
+    const [editRecur,        setEditRecur]        = useState(null);
     const [showRateEdit,     setShowRateEdit]     = useState(false);
     const [rateInput,        setRateInput]        = useState(String(RATE));
     const [filterCat,        setFilterCat]        = useState("all");
@@ -4900,6 +4729,7 @@ function BudgetView({ expenses, contributions, reimbursements, settings, onAddEx
     const [expandedMonths,   setExpandedMonths]   = useState({});
     const [showReimbForm,    setShowReimbForm]     = useState(null); // null | "maman" | "papa" | "moi"
     const [showAnnualForm,   setShowAnnualForm]    = useState(false);
+    const [editFixed,        setEditFixed]        = useState(null);
 
     // Keyboard shortcut: d → open add expense
     useEffect(() => {
@@ -5399,15 +5229,15 @@ function BudgetView({ expenses, contributions, reimbursements, settings, onAddEx
                     <div style={{ ...s.card, padding:"14px 18px" }}>
                         <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:10 }}>
                             <div style={{ fontSize:13, fontWeight:700, color:t.text }}>🔁 Virements récurrents</div>
-                            <button onClick={()=>setShowRecurForm(v=>!v)}
+                            <button onClick={()=>{ if(showRecurForm&&!editRecur){setShowRecurForm(false);}else{setEditRecur(null);setShowRecurForm(true);} }}
                                     style={{ padding:"5px 11px", borderRadius:8, border:`1px solid rgba(16,185,129,0.35)`, background:"rgba(16,185,129,0.08)", color:COL, fontSize:11, cursor:"pointer", fontWeight:700 }}>
-                                {showRecurForm?"✕":"+ Configurer"}
+                                {showRecurForm&&!editRecur?"✕":"+ Configurer"}
                             </button>
                         </div>
                         {showRecurForm && (
-                            <RecurringForm
-                                onSave={r=>{ onUpdateSettings({recurringContribs:[...(settings.recurringContribs||[]),{...r,id:uid()}]}); setShowRecurForm(false); }}
-                                onCancel={()=>setShowRecurForm(false)} s={s} t={t} COL={COL}
+                            <RecurringForm key={editRecur?.id||"new"} initialData={editRecur}
+                                onSave={r=>{ if(editRecur){ onUpdateSettings({recurringContribs:(settings.recurringContribs||[]).map(x=>x.id===editRecur.id?{...r,id:editRecur.id}:x)}); } else { onUpdateSettings({recurringContribs:[...(settings.recurringContribs||[]),{...r,id:uid()}]}); } setShowRecurForm(false); setEditRecur(null); }}
+                                onCancel={()=>{setShowRecurForm(false);setEditRecur(null);}} s={s} t={t} COL={COL}
                             />
                         )}
                         {recurringContribs.length===0&&!showRecurForm && <div style={{ fontSize:12, color:t.textTiny }}>Aucun virement récurrent — configure ici les virements mensuels de ta mère par exemple</div>}
@@ -5420,6 +5250,10 @@ function BudgetView({ expenses, contributions, reimbursements, settings, onAddEx
                                     {r.note && <span style={{ fontSize:11, color:t.textDim }}> · {r.note}</span>}
                                 </div>
                                 <span style={{ fontSize:12, fontWeight:700, color:COL }}>+{fmt(toD(r.amount,r.inputCurrency))}/mois</span>
+                                <button onClick={()=>{setEditRecur(r);setShowRecurForm(true);}}
+                                        title="Modifier / Edit"
+                                        style={{ background:"none", border:"none", color:t.textSub, cursor:"pointer", fontSize:11, opacity:0.45, padding:"2px 4px" }}
+                                        onMouseEnter={e=>e.currentTarget.style.opacity="1"} onMouseLeave={e=>e.currentTarget.style.opacity="0.45"}>✏️</button>
                                 <button onClick={()=>onUpdateSettings({recurringContribs:(settings.recurringContribs||[]).filter(x=>x.id!==r.id)})}
                                         style={{ background:"none", border:"none", color:t.delColor, cursor:"pointer", fontSize:12, opacity:0.4, padding:"2px 4px" }}
                                         onMouseEnter={e=>e.currentTarget.style.opacity="1"} onMouseLeave={e=>e.currentTarget.style.opacity="0.4"}>✕</button>
@@ -5527,15 +5361,15 @@ function BudgetView({ expenses, contributions, reimbursements, settings, onAddEx
                                     : "Coût annuel ÷ mois = part mensuelle (abonnement TL, frais scolarité…)"}
                             </div>
                         </div>
-                        <button onClick={()=>setShowAnnualForm(v=>!v)}
+                        <button onClick={()=>{ if(showAnnualForm&&!editFixed){setShowAnnualForm(false);}else{setEditFixed(null);setShowAnnualForm(true);} }}
                                 style={{ padding:"5px 11px", borderRadius:8, border:`1px solid rgba(16,185,129,0.35)`, background:"rgba(16,185,129,0.08)", color:COL, fontSize:11, cursor:"pointer", fontWeight:700, flexShrink:0, marginLeft:10 }}>
-                            {showAnnualForm ? "✕" : bt("add_annual")}
+                            {showAnnualForm&&!editFixed ? "✕" : bt("add_annual")}
                         </button>
                     </div>
                     {showAnnualForm && (
-                        <FixedExpenseForm bt={bt} catLabel={catLabel}
-                            onSave={f=>{ onUpdateSettings({fixedExpenses:[...fixedExpenses,{...f,id:uid()}]}); setShowAnnualForm(false); }}
-                            onCancel={()=>setShowAnnualForm(false)} s={s} t={t} COL={COL} />
+                        <FixedExpenseForm key={editFixed?.id||"new"} initialData={editFixed} bt={bt} catLabel={catLabel}
+                            onSave={f=>{ if(editFixed){ onUpdateSettings({fixedExpenses:fixedExpenses.map(x=>x.id===editFixed.id?{...f,id:editFixed.id}:x)}); } else { onUpdateSettings({fixedExpenses:[...fixedExpenses,{...f,id:uid()}]}); } setShowAnnualForm(false); setEditFixed(null); }}
+                            onCancel={()=>{setShowAnnualForm(false);setEditFixed(null);}} s={s} t={t} COL={COL} />
                     )}
                     {fixedExpenses.length===0&&!showAnnualForm && (
                         <div style={{ fontSize:11, color:t.textTiny, textAlign:"center", padding:"10px 0" }}>
@@ -5565,6 +5399,10 @@ function BudgetView({ expenses, contributions, reimbursements, settings, onAddEx
                                     <div style={{ fontSize:15, fontWeight:800, color:COL }}>{fmt(perMonth)}</div>
                                     <div style={{ fontSize:9, color:t.textTiny }}>/mois</div>
                                 </div>
+                                <button onClick={()=>{setEditFixed(f);setShowAnnualForm(true);}}
+                                        title="Modifier / Edit"
+                                        style={{ background:"none", border:"none", color:t.textSub, cursor:"pointer", fontSize:11, opacity:0.45, padding:"2px 4px", flexShrink:0 }}
+                                        onMouseEnter={e=>e.currentTarget.style.opacity="1"} onMouseLeave={e=>e.currentTarget.style.opacity="0.45"}>✏️</button>
                                 <button onClick={()=>onUpdateSettings({fixedExpenses:fixedExpenses.filter(x=>x.id!==f.id)})}
                                         style={{ background:"none", border:"none", color:t.delColor, cursor:"pointer", fontSize:12, opacity:0.4, padding:"1px 3px", flexShrink:0 }}
                                         onMouseEnter={e=>e.currentTarget.style.opacity="1"} onMouseLeave={e=>e.currentTarget.style.opacity="0.4"}>✕</button>
@@ -5616,12 +5454,12 @@ function ReimbForm({ netToMaman, netToPapa, netFromMaman, netFromPapa, DCUR, bt,
     );
 }
 
-function FixedExpenseForm({ bt, catLabel, onSave, onCancel, s, t, COL }) {
+function FixedExpenseForm({ initialData, bt, catLabel, onSave, onCancel, s, t, COL }) {
     const isEn = typeof _LANG!=="undefined"&&_LANG==="en";
     const PERIODS = isEn
         ? [["12","Annual (÷12 months)"],["9","Academic year EPFL (÷9 months)"],["5","Semester (÷5 months)"],["6","Half-year (÷6 months)"],["1","Already monthly"]]
         : [["12","Annuelle (÷12 mois)"],["9","Année académique EPFL (÷9 mois)"],["5","Semestre (÷5 mois)"],["6","Semestriel (÷6 mois)"],["1","Déjà mensuel"]];
-    const [form, setForm] = useState({ name:"", category:"", amount:"", currency:"CHF", amortizeMonths:12 });
+    const [form, setForm] = useState(initialData ? { ...initialData, amount:String(initialData.amount) } : { name:"", category:"", amount:"", currency:"CHF", amortizeMonths:12 });
     const up = (k,v) => setForm(f=>({...f,[k]:v}));
     const handleSave = () => {
         const amt = parseFloat(form.amount);
@@ -5670,14 +5508,14 @@ function FixedExpenseForm({ bt, catLabel, onSave, onCancel, s, t, COL }) {
             )}
             <div style={{ display:"flex", gap:8, justifyContent:"flex-end" }}>
                 <button onClick={onCancel} style={{ padding:"5px 12px", borderRadius:8, border:`1px solid ${t.cardBdr}`, background:"none", color:t.textSub, fontSize:11, cursor:"pointer" }}>{bt("cancel")}</button>
-                <button onClick={handleSave} style={{ padding:"5px 14px", borderRadius:8, border:"none", background:COL, color:"#0f1117", fontSize:11, cursor:"pointer", fontWeight:700 }}>{bt("save")}</button>
+                <button onClick={handleSave} style={{ padding:"5px 14px", borderRadius:8, border:"none", background:COL, color:"#0f1117", fontSize:11, cursor:"pointer", fontWeight:700 }}>{initialData?bt("modify"):bt("save")}</button>
             </div>
         </div>
     );
 }
 
-function RecurringForm({ onSave, onCancel, s, t, COL }) {
-    const [form, setForm] = useState({ from:"maman", amount:"", inputCurrency:"CHF", startDate:getTodayKey().slice(0,7)+"-01", note:"" });
+function RecurringForm({ initialData, onSave, onCancel, s, t, COL }) {
+    const [form, setForm] = useState(initialData ? { ...initialData, amount:String(initialData.amount) } : { from:"maman", amount:"", inputCurrency:"CHF", startDate:getTodayKey().slice(0,7)+"-01", note:"" });
     const up = (k, v) => setForm(f => ({ ...f, [k]:v }));
     const handleSave = () => {
         const amt = parseFloat(form.amount);
@@ -5711,7 +5549,7 @@ function RecurringForm({ onSave, onCancel, s, t, COL }) {
                    placeholder="Note (optionnelle)" style={{ ...s.input, fontSize:12, padding:"5px 8px" }} />
             <div style={{ display:"flex", gap:8, justifyContent:"flex-end" }}>
                 <button onClick={onCancel} style={{ padding:"5px 12px", borderRadius:8, border:`1px solid ${t.cardBdr}`, background:"none", color:t.textSub, fontSize:11, cursor:"pointer" }}>Annuler</button>
-                <button onClick={handleSave} style={{ padding:"5px 14px", borderRadius:8, border:"none", background:COL, color:"#0f1117", fontSize:11, cursor:"pointer", fontWeight:700 }}>Enregistrer</button>
+                <button onClick={handleSave} style={{ padding:"5px 14px", borderRadius:8, border:"none", background:COL, color:"#0f1117", fontSize:11, cursor:"pointer", fontWeight:700 }}>{initialData?"Modifier":"Enregistrer"}</button>
             </div>
         </div>
     );
@@ -5868,26 +5706,16 @@ function ExpenseForm({ initialData, onSave, onCancel, s, t, COL }) {
 
 // ── SearchOverlay ─────────────────────────────────────────────────────────────
 
-function SearchOverlay({ data, t, s, searchQ, setSearchQ, searchInputRef, onClose, onGoToDay, onGoToWeek }) {
+function SearchOverlay({ data, t, s, searchQ, setSearchQ, searchInputRef, onClose, onGoToDay }) {
     const results = [];
     if (searchQ.trim().length > 1) {
-        Object.entries(data.weeks||{}).forEach(([wk,wv]) => {
-            (wv.goals||[]).forEach(g => {
-                if (g.text.toLowerCase().includes(searchQ.toLowerCase()))
-                    results.push({ type:"week", wk, goal:g });
-            });
-        });
         Object.entries(data.days||{}).forEach(([dk,dv]) => {
             (dv.goals||[]).forEach(g => {
                 if (g.text.toLowerCase().includes(searchQ.toLowerCase()))
                     results.push({ type:"day", dk, goal:g });
             });
         });
-        results.sort((a,b) => {
-            const ka = a.type==="week" ? a.wk : a.dk;
-            const kb = b.type==="week" ? b.wk : b.dk;
-            return kb.localeCompare(ka);
-        });
+        results.sort((a,b) => b.dk.localeCompare(a.dk));
     }
 
     return (
@@ -5914,11 +5742,11 @@ function SearchOverlay({ data, t, s, searchQ, setSearchQ, searchInputRef, onClos
                         return (
                             <div key={i} className="ir"
                                  style={{ padding:"11px 18px", borderBottom:`1px solid ${t.divider}`, cursor:"pointer", display:"flex", gap:10, alignItems:"center" }}
-                                 onClick={()=>{ r.type==="day" ? onGoToDay(r.dk) : onGoToWeek(r.wk); onClose(); }}>
+                                 onClick={()=>{ onGoToDay(r.dk); onClose(); }}>
                                 <span style={{ fontSize:13, color:r.goal.done?"#34d399":t.text, flex:1, textDecoration:r.goal.done?"line-through":"none" }}>{r.goal.text}</span>
-                                <span style={{ fontSize:10, color:t.textDim, flexShrink:0 }}>{r.type==="day"?r.dk:getWeekLabel(r.wk)}</span>
+                                <span style={{ fontSize:10, color:t.textDim, flexShrink:0 }}>{r.dk}</span>
                                 {c && <span style={{ ...s.badge(catCol(c.id,t)), flexShrink:0 }}>{CAT_ICONS[r.goal.cat]}</span>}
-                                <span style={{ fontSize:10, color:t.textTiny, flexShrink:0 }}>{r.type==="day"?tr("day_type"):tr("week_type")}</span>
+                                <span style={{ fontSize:10, color:t.textTiny, flexShrink:0 }}>{tr("day_type")}</span>
                             </div>
                         );
                     })}
